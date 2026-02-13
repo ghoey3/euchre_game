@@ -12,7 +12,9 @@
 ========================= -->
 <div id="landing-screen" class="screen active">
   <div class="landing-container">
-  <h1 class="title">Euchre</h1>
+
+    <h1 class="title">Euchre</h1>
+
     <div class="landing-card">
       <input
         id="player-name-input"
@@ -40,11 +42,10 @@
           Join Lobby
         </button>
       </div>
+    </div>
+
   </div>
 </div>
-</div>
-
-
 
 <!-- =========================
      LOBBY SCREEN
@@ -52,13 +53,12 @@
 <div id="lobby-screen" class="screen">
   <div class="lobby-container">
     <div id="lobby-code-display" class="lobby-code"></div>
-    <div class="lobby-table">
 
+    <div class="lobby-table">
       <div class="lobby-seat seat-top" data-seat="2"></div>
       <div class="lobby-seat seat-left" data-seat="1"></div>
       <div class="lobby-seat seat-right" data-seat="3"></div>
       <div class="lobby-seat seat-bottom" data-seat="0"></div>
-
     </div>
 
     <div class="lobby-controls">
@@ -73,7 +73,6 @@
   </div>
 </div>
 
-
 <!-- =========================
      GAME SCREEN
 ========================= -->
@@ -87,6 +86,7 @@
   <div id="trump-indicator"></div>
 
   <div id="table">
+    <div id="speech-layer"></div>
     <div id="player-names-layer"></div>
     <div id="upcard-layer"></div>
 
@@ -95,30 +95,35 @@
       <div class="hand"></div>
       <div class="upcard-slot"></div>
     </div>
+
     <div id="player-left" class="seat">
       <div class="seat-markers"></div>
       <div class="hand"></div>
       <div class="upcard-slot"></div>
     </div>
+
     <div id="player-right" class="seat">
       <div class="seat-markers"></div>
       <div class="hand"></div>
       <div class="upcard-slot"></div>
     </div>
+
     <div id="player-bottom" class="seat">
       <div class="seat-markers"></div>
       <div class="hand"></div>
       <div class="upcard-slot"></div>
     </div>
+
     <div id="trick-area"></div>
   </div>
+
   <div id="bottom-name" class="bottom-name"></div>
   <div id="controls"></div>
 
 </div>
 
-
 <script src="/socket.io/socket.io.js"></script>
 <script type="module" src="main.js"></script>
 
 </body>
+</html>

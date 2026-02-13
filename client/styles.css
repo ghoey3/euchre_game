@@ -8,7 +8,7 @@
 }
 
 .screen.active {
-  display: block;
+  display: block; /* or block if you prefer */
 }
 
 .title {
@@ -35,7 +35,7 @@ body {
    LANDING
 ========================= */
 
-#landing-screen {
+#landing-screen.active {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -482,6 +482,13 @@ body {
 
 #player-right .speech-bubble {
   right: 125%;
+}
+
+#speech-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 200;
 }
 
 /* =========================

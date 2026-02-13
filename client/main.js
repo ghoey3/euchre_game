@@ -47,7 +47,6 @@ playAiBtn.onclick = () => {
 
   socket.emit("start_vs_ai", { name });
 
-  setAppState("game");
 };
 
 createLobbyBtn.onclick = () => {
@@ -357,7 +356,7 @@ socket.on("kicked", () => {
 ========================= */
 
 socket.on("game_event", (message) => {
-
+  console.log("GAME EVENT:", message);
   switch (message.type) {
 
     case "lobby_update":
@@ -390,6 +389,8 @@ socket.on("game_event", (message) => {
        GAME START
     ========================= */
     case "game_start":
+      console.log("SWITCH HIT GAME_START");
+
       setAppState("game");
       statusDiv.textContent = "Game started!";
 
