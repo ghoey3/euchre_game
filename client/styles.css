@@ -996,3 +996,54 @@ body {
 .input-locked * {
   pointer-events: none;
 }
+
+/* =========================
+   GAME OVER OVERLAY
+========================= */
+
+.game-over-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  transition: opacity 0.3s ease;
+}
+
+.game-over-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.game-over-content {
+  text-align: center;
+  animation: gameOverPop 0.4s ease-out;
+}
+
+#game-over-title {
+  font-size: 72px;
+  margin-bottom: 40px;
+  text-shadow:
+    0 0 20px currentColor,
+    0 0 40px currentColor;
+}
+
+.game-over-buttons {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+@keyframes gameOverPop {
+  from {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

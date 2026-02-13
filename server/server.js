@@ -27,7 +27,7 @@ io.on("connection", socket => {
      VS AI (unchanged)
   ========================= */
   socket.on("start_vs_ai", ({ name }) => {
-    const room = new GameRoom("vs-ai-" + socket.id, io);
+    const room = new GameRoom("vs-ai-" + socket.id, io, 'ai');
 
     room.addHumanPlayer(socket, name);
     room.addAIPlayer(new SimpleAIStrategy());
@@ -61,7 +61,7 @@ io.on("connection", socket => {
 
     const code = generateCode();
 
-    const room = new GameRoom(code, io);
+    const room = new GameRoom(code, io, 'lobby');
     rooms.set(code, room);
 
     room.addHumanPlayer(socket, name);

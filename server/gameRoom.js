@@ -1,7 +1,7 @@
 import GameEngine from "./engine/engine.js";
 
 export default class GameRoom {
-  constructor(roomId, io) {
+  constructor(roomId, io, mode = 'lobby') {
     this.roomId = roomId;
     this.io = io;
 
@@ -17,6 +17,7 @@ export default class GameRoom {
       0: generateTeamName(),
       1: generateTeamName()
     };
+    this.mode = mode 
   }
 
   /* ------------------------------------------------ */
@@ -267,7 +268,9 @@ export default class GameRoom {
                   type: s.type
                 } : null
               )
-              .filter(Boolean)
+              .filter(Boolean),
+            gameMode: this.mode,
+            teamNames: this.teamNames,
           });
         }
       });

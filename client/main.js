@@ -84,6 +84,7 @@ let state = {
   scores: { team0: 0, team1: 0 },
   phase: null,
 
+  teamNames: ['team 0', 'team 1'],
   cardCounts: { 0:5, 1:5, 2:5, 3:5 },
 
   round: {
@@ -385,15 +386,15 @@ socket.on("game_event", (message) => {
        GAME START
     ========================= */
     case "game_start":
-
+      state.gameMode = message.gameMode;
       setAppState("game");
       statusDiv.textContent = "Game started!";
-
+      state.teamNames = message.teamNames;
       state.mySeatIndex = message.seatIndex;
       state.players = message.players;   
 
       state.scores = { team0: 0, team1: 0 };
-      renderScores(state.scores);
+      renderScores(state.scores, state.teamNames);
 
       state.cardCounts = { 0:5, 1:5, 2:5, 3:5 };
 
@@ -574,7 +575,7 @@ socket.on("game_event", (message) => {
     case "round_result":
 
       state.scores = message.scores;
-      renderScores(state.scores);
+      renderScores(state.scores, state.teamNames);
 
       state.round = {
         dealerIndex: null,
@@ -638,10 +639,53 @@ socket.on("game_event", (message) => {
     /* =========================
        GAME OVER
     ========================= */
-    case "game_over":
+    case "game_over": {
 
       statusDiv.textContent = "Game Over!";
+      renderScores(message.scores, teamNames);
+
+      // Optional: disable controls
+      controlsDiv.innerHTML = "";
+
+      // Prevent duplicate triggers
+      if (state.returningToLobby) break;
+      state.returningToLobby = true;
+
+      setTimeout(() => {
+
+        // Reset game state
+        state.trick = { cards: [] };
+        state.round = {
+          dealerIndex: null,
+          trickLeader: null,
+          trump: null,
+          makerTeam: null,
+          tricks: { team0: 0, team1: 0 },
+          alonePlayerIndex: null
+        };
+
+        state.cardCounts = { 0: 0, 1: 0, 2: 0, 3: 0 };
+
+        clearUpcard();
+        clearActiveHighlight();
+        renderAloneIndicator(null, state.mySeatIndex);
+        updateSeatMarkers({
+          dealerIndex: null,
+          leaderIndex: null,
+          mySeatIndex: state.mySeatIndex
+        });
+
+        document.getElementById("trick-area").innerHTML = "";
+
+        state.returningToLobby = false;
+
+        // 🔥 Go back to lobby
+        setAppState("lobby");
+
+      }, 5000);
+
       break;
+    }
     /* =========================
        Dealer Pickup
     ========================= */
