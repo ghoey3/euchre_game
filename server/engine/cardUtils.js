@@ -40,7 +40,7 @@ export function getEffectiveSuit(card, trump) {
   return card.suit;
 }
 
-function rankValue(rank) {
+export function rankValue(rank) {
   const values = {
     "A": 6,
     "K": 5,

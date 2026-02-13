@@ -42,7 +42,7 @@ export function renderUpcard(upcard, dealerIndex, mySeatIndex) {
   const gap = 25;
 
   // 🔥 Tune these two independently
-  const verticalShift = 100;
+  const verticalShift = 150;
   const horizontalShift = 165;
 
   switch (relative) {
