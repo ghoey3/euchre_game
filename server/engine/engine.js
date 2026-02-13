@@ -5,7 +5,7 @@ import { getEffectiveSuit } from "./cardUtils.js";
 export default class GameEngine {
   constructor(room) {
     this.room = room;
-    this.dealerIndex = 0;
+    this.dealerIndex = null;
     this.scores = { team0: 0, team1: 0 };
     this.winningScore = 10;
   }
@@ -22,6 +22,8 @@ export default class GameEngine {
       });
     return;
     };
+    await this.determineDealerByJack()
+
     this.room.broadcast({
       type: "players_update",
       players: this.room.seats.map((seat, index) => ({
@@ -30,7 +32,6 @@ export default class GameEngine {
         type: seat?.type || null
       }))
     });
-
     while (!this.isGameOver()) {
       await this.playRound();
       this.rotateDealer();
@@ -42,6 +43,37 @@ export default class GameEngine {
       });
     return;
     };
+  }
+
+  async determineDealerByJack() {
+    let deck = createDeck(); // however you build deck
+    deck = shuffle(deck);
+
+    for (let i = 0; i < deck.length; i++) {
+      const seatIndex = i % 4;
+      const card = deck[i];
+      console.log("CUT CARD:", card);
+      // Tell clients a card was dealt to seatIndex
+      this.room.broadcast({
+        type: "dealer_cut_card",
+        seatIndex,
+        card
+      });
+
+      await sleep(1200); // pause for animation
+
+      if (card.rank === "J") {
+        this.dealerIndex = seatIndex;
+
+        this.room.broadcast({
+          type: "dealer_selected",
+          dealerIndex: seatIndex
+        });
+
+        await new Promise(res => setTimeout(res, 800));
+        return;
+      }
+    }
   }
   initializeRound() {
     console.log("Initializing first round...");

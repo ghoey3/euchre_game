@@ -10,6 +10,7 @@ import { renderSpeechBubble } from "./ui/renderSpeechBubble.js";
 import { renderTrickInfo } from "./ui/renderTrickInfo.js";
 import { renderPlayerNames } from "./ui/renderPlayerNames.js";
 import { updateSeatMarkers } from "./ui/renderSeatMarkers.js";  
+import { renderCutCardAnimation } from "./ui/renderCutCardAnimation.js"
 
 
 const socket = io();
@@ -309,11 +310,6 @@ function getTeamFromSeat(seatIndex) {
   return seatIndex % 2; // 0 & 2 = team0, 1 & 3 = team1
 }
 
-function clearUpcard() {
-  const old = document.querySelector(".upcard");
-  if (old) old.remove();
-}
-
 /* =========================
    SOCKET LISTENERS
 ========================= */
@@ -389,23 +385,22 @@ socket.on("game_event", (message) => {
        GAME START
     ========================= */
     case "game_start":
-      console.log("SWITCH HIT GAME_START");
 
       setAppState("game");
       statusDiv.textContent = "Game started!";
 
       state.mySeatIndex = message.seatIndex;
-      state.players = message.players;   // ← ADD THIS
+      state.players = message.players;   
 
       state.scores = { team0: 0, team1: 0 };
       renderScores(state.scores);
 
       state.cardCounts = { 0:5, 1:5, 2:5, 3:5 };
 
-      renderPlayerNames(state.players, state.mySeatIndex);  // ← ADD THIS
+      renderPlayerNames(state.players, state.mySeatIndex); 
 
       renderHand(state.hand, socket);
-      updateBacks(state);
+      // updateBacks(state);
       renderAloneIndicator(null, state.mySeatIndex);
 
       break;
@@ -678,6 +673,24 @@ socket.on("game_event", (message) => {
       if (phase === 'call_trump') {
         clearUpcard();
       }
+      break;
+      
+    case "dealer_cut_card": {
+      const { seatIndex, card } = message;
+      renderCutCardAnimation(seatIndex, state.mySeatIndex, card);
+      break;
+    }
+    case "dealer_selected":
+      state.round.dealerIndex = message.dealerIndex;
+
+      updateSeatMarkers({
+        dealerIndex: state.round.dealerIndex,
+        leaderIndex: null,
+        mySeatIndex: state.mySeatIndex
+      });
+
+      statusDiv.textContent = "Dealer selected!";
+      break;
   }
 });
 

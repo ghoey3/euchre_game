@@ -14,7 +14,7 @@ export function updateSeatMarkers({ dealerIndex, leaderIndex, mySeatIndex }) {
   ];
 
   roles.forEach(({ index, type }) => {
-    if (index === null || index === undefined) return;
+    if (index == null) return;
 
     const relative = (index - mySeatIndex + 4) % 4;
     const seat = document.getElementById(seatMap[relative]);
@@ -34,19 +34,11 @@ export function updateSeatMarkers({ dealerIndex, leaderIndex, mySeatIndex }) {
     if (type === "dealer") {
       marker.classList.add("marker-dealer");
       marker.textContent = "D";
-      marker.style.order = 0; // LEFT
     } else {
       marker.classList.add("marker-leader");
       marker.textContent = "L";
-      marker.style.order = 1; // RIGHT
     }
 
     markerContainer.appendChild(marker);
-  });
-}
-
-export function clearSeatMarkers() {
-  document.querySelectorAll(".seat-markers").forEach(c => {
-    c.innerHTML = "";
   });
 }
