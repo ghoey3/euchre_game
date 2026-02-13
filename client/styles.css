@@ -1,0 +1,885 @@
+
+/* =========================
+   Screen
+========================= */
+
+.screen {
+  display: none;
+}
+
+.screen.active {
+  display: block;
+}
+
+.title {
+  font-size: 48px;
+  margin-top: 40px;
+}
+
+
+
+body {
+  background: #0b5d2a;
+  font-family: Arial, sans-serif;
+  color: white;
+  text-align: center;
+  margin: 0;
+}
+
+
+#game-screen {
+  position: relative;
+}
+
+/* =========================
+   LANDING
+========================= */
+
+#landing-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+.landing-container {
+  width: 500px;
+  padding: 40px;
+  background: #1b7a3a;
+  border-radius: 24px;
+  box-shadow:
+    0 20px 40px rgba(0,0,0,0.5),
+    inset 0 0 30px rgba(0,0,0,0.3);
+}
+
+.title {
+  font-size: 48px;
+  margin-bottom: 30px;
+  letter-spacing: 1px;
+  text-shadow: 0 0 12px rgba(0,0,0,0.6);
+}
+
+.landing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+#player-name-input,
+#join-code-input {
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-size: 16px;
+  background: rgba(0,0,0,0.3);
+  color: white;
+  outline: none;
+}
+
+#player-name-input::placeholder,
+#join-code-input::placeholder {
+  color: rgba(255,255,255,0.6);
+}
+
+.landing-btn {
+  padding: 12px;
+  border-radius: 30px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.05);
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.landing-btn:hover {
+  transform: translateY(-2px);
+  border-color: white;
+  background: rgba(255,255,255,0.12);
+}
+
+.landing-btn.primary {
+  border-color: gold;
+  box-shadow: 0 0 12px rgba(255,215,0,0.5);
+}
+
+.join-row {
+  display: flex;
+  gap: 10px;
+}
+
+/* =========================
+   LOBBY CONTAINER
+========================= */
+
+.lobby-container {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+}
+
+/* =========================
+   LOBBY TABLE
+========================= */
+
+.lobby-table {
+  position: relative;
+  width: 700px;
+  height: 450px;
+  background: #1b7a3a;
+  border-radius: 24px;
+  box-shadow:
+    0 20px 40px rgba(0,0,0,0.5),
+    inset 0 0 30px rgba(0,0,0,0.3);
+}
+
+/* =========================
+   SEATS
+========================= */
+
+.lobby-seat {
+  position: absolute;
+  width: 160px;
+  height: 80px;
+  border-radius: 16px;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+}
+
+.lobby-seat:hover {
+  transform: translateY(-4px);
+}
+
+/* Positioning */
+.seat-top {
+  top: 20px;
+  left: 50%;
+  margin-left: -80px; /* half width */
+}
+
+.seat-bottom {
+  bottom: 20px;
+  left: 50%;
+  margin-left: -80px;
+}
+
+.seat-left {
+  left: 20px;
+  top: 50%;
+  margin-top: -40px; /* half height */
+}
+
+.seat-right {
+  right: 20px;
+  top: 50%;
+  margin-top: -40px;
+}
+
+
+
+/* Seat states */
+.lobby-seat.empty {
+  opacity: 0.5;
+  border: 2px dashed rgba(255,255,255,0.2);
+}
+
+.lobby-seat.human {
+  background: rgba(0,0,0,0.5);
+}
+
+.lobby-seat.ai {
+  background: rgba(0,0,0,0.25);
+}
+
+.lobby-seat.host {
+  box-shadow:
+    0 0 15px gold,
+    0 0 30px rgba(255,215,0,0.5);
+}
+
+.you-team-0 {
+  box-shadow:
+    0 0 15px #ffd700,
+    0 0 30px rgba(255,215,0,0.6);
+}
+
+.you-team-1 {
+  box-shadow:
+    0 0 15px #00c8ff,
+    0 0 30px rgba(0,200,255,0.6);
+}
+
+.mini-btn {
+  margin-top: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  transition: 0.2s ease;
+}
+
+.mini-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.lobby-code {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  opacity: 0.9;
+}
+
+/* =========================
+   LOBBY CONTROLS
+========================= */
+
+.lobby-controls {
+  display: flex;
+  gap: 20px;
+}
+/* =========================
+   TABLE
+========================= */
+
+#table {
+  position: relative;
+  width: 900px;
+  height: 600px;
+  background: #146b35;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  overflow: visible; /* important */
+  margin: 80px auto 10px auto; 
+  z-index: 1;
+}
+
+#trick-area {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+#trick-area .trick-card {
+  transition: none !important;
+  animation: none !important;
+  cursor: default;
+}
+/* =========================
+   SEATS
+========================= */
+
+.seat {
+  position: absolute;
+  display: flex;
+  gap: 10px;
+  z-index: 2;
+  overflow: visible
+}
+
+/* Bottom */
+#player-bottom {
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  justify-content: center;
+}
+
+/* Top */
+#player-top {
+  top: 20px;
+  left: 0;
+  right: 0;
+  justify-content: center;
+}
+
+/* Left */
+#player-left {
+  left: 20px;
+  top: 0;
+  bottom: 0;
+  justify-content: center;
+  flex-direction: column;
+}
+
+/* Right */
+#player-right {
+  right: 20px;
+  top: 0;
+  bottom: 0;
+  justify-content: center;
+  flex-direction: column;
+}
+
+/* =========================
+   UPCARD POSITIONING
+========================= */
+
+#upcard-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.upcard {
+  position: absolute;
+  pointer-events: none;
+  z-index: 60;
+  transform: translate(-50%, -50%) translateY(-8px);;
+}
+
+.upcard-slot {
+  position: absolute;
+  width: 70px;
+  height: 100px;
+  pointer-events: none;
+}
+
+/* Bottom dealer */
+#player-bottom .upcard-slot {
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Top dealer */
+#player-top .upcard-slot {
+  bottom: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Left dealer */
+#player-left .upcard-slot {
+  right: -120px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+/* Right dealer */
+#player-right .upcard-slot {
+  left: -120px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+/* =========================
+   CARDS
+========================= */
+
+.card {
+  width: 70px;
+  height: 100px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #222;
+  padding: 6px;
+  box-sizing: border-box;
+  font-weight: bold;
+  font-size: 18px;
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card.red {
+  color: #c40000;
+}
+
+.card.black {
+  color: #000;
+}
+
+#player-bottom .card:not(.back):hover {
+  transform: translateY(-10px);
+  box-shadow: 0 6px 12px rgba(0,0,0,0.5);
+}
+
+.seat:not(#player-bottom) .card {
+  pointer-events: none;
+}
+
+.card .rank {
+  font-size: 20px;
+}
+
+.card .suit {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  font-size: 22px;
+}
+
+.card.back {
+  background: linear-gradient(45deg, #002b5c, #001a3a);
+  border: 2px solid #000;
+}
+
+.horizontal-back {
+  width: 100px;
+  height: 70px;
+}
+
+.hand {
+  display: flex;
+  gap: 10px;
+}
+
+#player-left .hand,
+#player-right .hand {
+  flex-direction: column;
+}
+
+/* =========================
+   SPEECH BUBBLES
+========================= */
+
+.speech-bubble {
+  position: absolute;
+  z-index: 1000; /* higher than upcard */
+  background: white;
+  color: black;
+  padding: 12px 18px;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 700;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+  animation: popIn 0.15s ease-out;
+}
+
+@keyframes popIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+#player-bottom .speech-bubble {
+  bottom: 125%;
+}
+
+#player-top .speech-bubble {
+  top: 125%;
+}
+
+#player-left .speech-bubble {
+  left: 125%;
+}
+
+#player-right .speech-bubble {
+  right: 125%;
+}
+
+/* =========================
+   UI EFFECTS
+========================= */
+
+.winning-card {
+  box-shadow: 0 0 20px gold;
+  transform: scale(1.1);
+  z-index: 20;
+}
+
+.fade-out {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+/* .seat.dealer-seat .hand {
+  box-shadow:
+    0 0 15px rgba(255, 215, 0, 0.8),
+    0 0 30px rgba(255, 215, 0, 0.4);
+  border-radius: 12px;
+}
+
+.seat.leader-seat .hand {
+  box-shadow:
+    0 0 18px rgba(0, 180, 255, 0.9),
+    0 0 35px rgba(0, 180, 255, 0.6);
+  border-radius: 14px;
+  animation: leaderPulse 1.2s ease-in-out infinite alternate;
+} */
+
+.hand.active-hand {
+  border-radius: 14px;
+  animation: activePulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes activePulse {
+  from {
+    box-shadow:
+      0 0 10px rgba(170, 0, 255, 0.6),
+      0 0 20px rgba(170, 0, 255, 0.3);
+  }
+  to {
+    box-shadow:
+      0 0 25px rgba(200, 80, 255, 1),
+      0 0 45px rgba(200, 80, 255, 0.7);
+  }
+}
+
+
+.hand.alone-hand {
+  border-radius: 14px;
+  box-shadow:
+    0 0 12px rgba(180, 0, 0, 0.7),
+    0 0 28px rgba(255, 0, 0, 0.45);
+}
+
+.hand.alone-hand.active-hand {
+  animation: activePulse 1.2s ease-in-out infinite alternate;
+
+  box-shadow:
+    0 0 18px rgba(200, 0, 0, 1),
+    0 0 40px rgba(200, 0, 0, 0.7),
+
+    0 0 12px rgba(255, 255, 255, 0.9),
+    0 0 30px rgba(255, 255, 255, 0.6);
+}
+
+.hand.partner-faded {
+  opacity: 0.35;
+  filter: grayscale(70%);
+  transform: scale(0.98);
+  transition:
+    opacity 0.3s ease,
+    filter 0.3s ease,
+    transform 0.3s ease;
+}
+
+/* =========================
+   TRUMP INDICATOR
+========================= */
+
+#trump-indicator {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  font-size: 22px;
+  font-weight: bold;
+  background: rgba(0,0,0,0.4);
+  padding: 8px 14px;
+  border-radius: 20px;
+  backdrop-filter: blur(4px);
+}
+
+
+/* =========================
+   CONTROL PANEL
+========================= */
+
+#controls {
+  position: relative;   /* NOT absolute */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+  margin-bottom: 30px;
+  z-index: 1;
+}
+
+/* Generic button style */
+.control-btn {
+  padding: 10px 26px;
+  border-radius: 30px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.05);
+  color: white;
+  transition: all 0.2s ease;
+}
+
+/* Hover effect */
+.control-btn:hover {
+  transform: translateY(-2px);
+  border-color: white;
+  background: rgba(255,255,255,0.12);
+}
+
+/* Primary (Order Up / Suit call) */
+.control-btn.primary {
+  border-color: gold;
+  box-shadow: 0 0 10px rgba(255,215,0,0.5);
+}
+
+/* Pass */
+.control-btn.pass {
+  border-color: rgba(255,80,80,0.7);
+}
+
+/* Suit buttons */
+.control-btn.suit {
+  font-size: 22px;
+  padding: 10px 20px;
+}
+
+.alone-toggle.active {
+  border-color: gold;
+  background: rgba(255,215,0,0.15);
+  box-shadow:
+    0 0 12px rgba(255,215,0,0.8),
+    0 0 25px rgba(255,215,0,0.4);
+  color: gold;
+}
+
+/* =========================
+   SCOREBOARD
+========================= */
+
+#scores {
+  margin-top: 8px;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+}
+
+.score-pill {
+  padding: 8px 18px;
+  border-radius: 30px;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+
+  transition: all 0.25s ease;
+}
+
+/* Team 0 styling */
+.score-team0 {
+  color: #ffd700;
+}
+
+/* Team 1 styling */
+.score-team1 {
+  color: #00c8ff;
+}
+
+/* Leader glow */
+.score-leading {
+  box-shadow:
+    0 0 12px currentColor,
+    0 0 24px currentColor;
+  transform: scale(1.08);
+}
+
+/* =========================
+   TRICK INFO
+========================= */
+
+#trick-info {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.trick-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 14px;
+  background: rgba(0,0,0,0.35);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 0 12px rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
+
+.trick-highlight {
+  box-shadow: 0 0 12px gold;
+}
+
+.trick-caller-0 {
+  color: #ffd700;
+}
+
+.trick-caller-1 {
+  color: #00c8ff;
+}
+
+/* =========================
+   NAMES
+========================= */
+#player-names-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5; /* above table, below speech bubbles */
+}
+
+.player-name {
+  position: absolute;
+  font-weight: 700;
+  font-size: 15px;
+  max-width: 110px;
+  line-height: 1.2;
+  white-space: normal;
+  text-shadow: 0 0 6px rgba(0,0,0,0.6);
+  pointer-events: none;
+}
+
+/* TOP */
+#name-top {
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -120%);
+}
+
+/* BOTTOM */
+#name-bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translate(-50%, 120%);
+}
+
+/* LEFT */
+#name-left {
+  left: 0;
+  top: 50%;
+  transform: translate(-120%, -50%);
+  text-align: right;
+}
+
+/* RIGHT */
+#name-right {
+  right: 0;
+  top: 50%;
+  transform: translate(120%, -50%);
+}
+
+.team-0 {
+  color: #ffd700;  /* gold */
+}
+
+.team-1 {
+  color: #00c8ff;  /* blue */
+}
+
+/* =========================
+   Team Label
+========================= */
+.team-label {
+  position: absolute;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 10px rgba(0,0,0,0.5);
+  user-select: none;
+}
+
+.team-0-label {
+  top: 10px;
+  left: 20px;
+  color: #ffd700;
+}
+
+.team-1-label {
+  top: 10px;
+  right: 20px;
+  color: #00c8ff;
+}
+
+.team-label.editable {
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.team-label.editable:hover {
+  transform: scale(1.05);
+}
+
+/* =========================
+   Markers 
+========================= */
+.seat-markers {
+  position: absolute;
+  display: flex;
+  gap: 6px;
+  z-index: 15;
+  align-items: center;
+  justify-content: center;
+}
+.seat-marker {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 0 10px rgba(0,0,0,0.6);
+}
+
+/* Dealer chip */
+.marker-dealer {
+  background: gold;
+  color: black;
+}
+
+/* Trick leader chip */
+.marker-leader {
+  background: #00b4ff;
+}
+
+/* Bottom seat — move upward toward center */
+#player-bottom .seat-markers {
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Top seat — move downward toward center */
+#player-top .seat-markers {
+  bottom: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Left seat — move inward */
+#player-left .seat-markers {
+  right: -50px;
+  top: calc(50% + 12px);
+  transform: translateY(-50%);
+}
+
+/* Right seat — move inward */
+#player-right .seat-markers {
+  left: -50px;
+  top: calc(50% + 12px);
+  transform: translateY(-50%);
+}
+
+#player-left .seat-markers,
+#player-right .seat-markers {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}

@@ -1,0 +1,739 @@
+import { createDeck, shuffle } from "./deck.js";
+import { determineTrickWinner } from "./trickLogic.js";
+import { getEffectiveSuit } from "./cardUtils.js";
+
+export default class GameEngine {
+  constructor(room) {
+    this.room = room;
+    this.dealerIndex = 0;
+    this.scores = { team0: 0, team1: 0 };
+    this.winningScore = 10;
+  }
+
+  /* ============================= */
+  /* ========= CORE LOOP ========= */
+  /* ============================= */
+
+  async start() {
+    if (this.isGameOver()){
+      this.room.broadcast({
+      type: "game_over",
+      scores: this.scores
+      });
+    return;
+    };
+    this.room.broadcast({
+      type: "players_update",
+      players: this.room.seats.map((seat, index) => ({
+        seatIndex: index,
+        name: seat?.name || null,
+        type: seat?.type || null
+      }))
+    });
+
+    while (!this.isGameOver()) {
+      await this.playRound();
+      this.rotateDealer();
+    }
+    if (this.isGameOver()){
+      this.room.broadcast({
+      type: "game_over",
+      scores: this.scores
+      });
+    return;
+    };
+  }
+  initializeRound() {
+    console.log("Initializing first round...");
+
+    this.deck = createDeck();
+    shuffle(this.deck);
+    this.dealCards();
+
+    this.room.seats.forEach((seat, index) => {
+      if (seat && seat.socket) {
+        seat.socket.emit("game_event", {
+          type: "hand_update",
+          hand: seat.hand,
+          mySeatIndex: index
+        });
+      }
+    });
+
+    const upcard = this.deck.pop();
+
+    this.room.broadcast({
+      type: "round_start",
+      dealerIndex: this.dealerIndex,
+      upcard: upcard,
+      scores: this.scores
+    });
+
+    return upcard; // 🔥 important
+  }
+    
+
+  isGameOver() {
+    return (
+      this.scores.team0 >= this.winningScore ||
+      this.scores.team1 >= this.winningScore
+    );
+  }
+
+  rotateDealer() {
+    this.dealerIndex = (this.dealerIndex + 1) % 4;
+  }
+
+  getTeam(playerIndex) {
+    return playerIndex % 2;
+  }
+
+  /* ============================= */
+  /* ========= UTILITIES ========= */
+  /* ============================= */
+
+  dealCards() {
+
+    this.room.seats.forEach(seat => {
+      if (seat) seat.hand = [];
+    });
+
+    for (let i = 0; i < 5; i++) {
+      for (let j = 1; j <= 4; j++) {
+
+        const playerIndex =
+          (this.dealerIndex + j) % 4;
+
+        const card = this.deck.pop();
+
+        if (!card) {
+          throw new Error("Deck ran out of cards!");
+        }
+
+        this.room.seats[playerIndex].hand.push(card);
+      }
+    }
+  }
+
+  buildContext(playerIndex, upcard, trump, trickState = {}, alonePlayerIndex = null) {
+    const player = this.room.seats[playerIndex];
+    if (!player) {
+      throw new Error(`Seat ${playerIndex} is empty during buildContext`);
+    }
+    return {
+      phase: trickState.phase || null,
+      hand: [...this.room.seats[playerIndex].hand],
+      upcard,
+      trump,
+      dealerIndex: this.dealerIndex,
+      myIndex: playerIndex,
+      alonePlayerIndex,
+      ...trickState,
+      score: this.scores
+    };
+  }
+
+  async getAction(playerIndex, context) {
+    const seat = this.room.seats[playerIndex];
+
+    if (seat.type === "ai") {
+
+      // Longer delay for card play
+      if (context.phase === "play_card") {
+        await sleep(1800 + Math.random() * 800);
+      }
+
+      // Shorter delay for bidding
+      else if (
+        context.phase === "order_up" ||
+        context.phase === "call_trump" ||
+        context.phase === "call_trump_forced"
+      ) {
+        await sleep(800 + Math.random() * 500);
+      }
+
+      return seat.strategy.getAction(context);
+    }
+
+    if (seat.type === "human") {
+      return await this.room.waitForPlayerAction(playerIndex, context);
+    }
+
+    throw new Error("Invalid seat type");
+  }
+
+  /* ============================= */
+  /* ========= ROUND LOGIC ======= */
+  /* ============================= */
+
+  async playRound() {
+    const upcard = this.initializeRound();
+
+    let trump = null;
+    let makerTeam = null;
+    let alonePlayerIndex = null;
+
+    /* -------- FIRST ROUND (ORDER UP) -------- */
+
+    for (let i = 1; i <= 4; i++) {
+
+      const playerIndex = (this.dealerIndex + i) % 4;
+
+      const context = this.buildContext(
+        playerIndex,
+        upcard,
+        null
+      );
+
+      context.phase = "order_up";
+
+      const action = await this.getAction(playerIndex, context);
+
+      // Always broadcast speech
+      if (action.type === "order_up") {
+        this.room.broadcast({
+          type: "player_spoke",
+          player: playerIndex,
+          text: action.call ? "Pick it up" : "Pass",
+          alone: action.alone || false
+        });
+      }
+
+      // If they DID NOT call, continue loop
+      if (!action.call) {
+        continue;
+      }
+
+      // ===============================
+      // SOMEONE ORDERED IT UP
+      // ===============================
+
+      trump = upcard.suit;
+      makerTeam = this.getTeam(playerIndex);
+
+      if (action.alone) {
+        alonePlayerIndex = playerIndex;
+      }
+
+      // ===============================
+      // DEALER PICKS UP UPCARD
+      // ===============================
+
+      const dealerSeat = this.room.seats[this.dealerIndex];
+
+      dealerSeat.hand.push(upcard);
+
+      this.room.broadcast({
+        type: "dealer_pickup",
+        dealerIndex: this.dealerIndex,
+        upcard
+      });
+
+      // ===============================
+      // DEALER DISCARD
+      // ===============================
+
+      const discardAction = await this.getAction(
+        this.dealerIndex,
+        {
+          phase: "discard",
+          hand: [...dealerSeat.hand],
+          trump,
+          dealerIndex: this.dealerIndex
+        }
+      );
+
+      if (!discardAction || discardAction.type !== "discard") {
+        throw new Error("Dealer must discard a card");
+      }
+
+      const discardIndex = dealerSeat.hand.findIndex(
+        c =>
+          c.rank === discardAction.card.rank &&
+          c.suit === discardAction.card.suit
+      );
+
+      if (discardIndex === -1) {
+        throw new Error("Invalid discard card");
+      }
+
+      dealerSeat.hand.splice(discardIndex, 1);
+
+      this.room.broadcast({
+        type: "dealer_discard",
+        dealerIndex: this.dealerIndex
+      });
+
+      break; 
+    }
+    /* -------- SECOND ROUND (CALL TRUMP) -------- */
+
+    if (!trump) {
+      this.room.broadcast({
+        type: "phase_change",
+        phase: "call_trump"
+      });
+      for (let i = 1; i <= 4; i++) {
+        const playerIndex = (this.dealerIndex + i) % 4;
+
+        let context = this.buildContext(playerIndex, upcard, null);
+        context.phase = "call_trump";
+
+        let action = await this.getAction(playerIndex, context);
+
+        // Stick the dealer
+        if (i === 4 && !action.call) {
+          context = this.buildContext(playerIndex, upcard, null);
+          context.phase = "call_trump_forced";
+
+          action = await this.getAction(playerIndex, context);
+        }
+
+        // 🔹 Broadcast speech exactly once
+        this.room.broadcast({
+          type: "player_spoke",
+          player: playerIndex,
+          text: action.call
+            ? action.suit.toUpperCase()
+            : "Pass",
+          alone: !!action.alone
+        });
+
+        // 🔹 Apply trump if chosen
+        if (action.call) {
+          trump = action.suit;
+          makerTeam = this.getTeam(playerIndex);
+
+          if (action.alone) {
+            alonePlayerIndex = playerIndex;
+          }
+
+          break;
+        }
+      }
+    }
+
+    this.room.broadcast({
+      type: "bidding_result",
+      trump,
+      makerTeam,
+      alonePlayerIndex
+    });
+
+    /* -------- PLAY TRICKS -------- */
+
+    const trickResults = await this.playTricks(trump, alonePlayerIndex);
+
+    /* -------- SCORING -------- */
+
+    this.scoreRound(trickResults, makerTeam);
+
+    this.room.broadcast({
+      type: "round_result",
+      scores: this.scores,
+      trickResults
+    });
+  }
+
+  /* ============================= */
+  /* ========= TRICKS ============ */
+  /* ============================= */
+
+  async playTricks(trump, alonePlayerIndex = null) {
+    let leader = (this.dealerIndex + 1) % 4;
+    const tricksWon = [0, 0];
+
+    const partnerIndex =
+      alonePlayerIndex !== null
+        ? (alonePlayerIndex + 2) % 4
+        : null;
+
+    for (let trickNumber = 0; trickNumber < 5; trickNumber++) {
+      this.room.broadcast({
+        type: "trick_start",
+        trickLeader: leader
+      });
+
+      const trickCards = [];
+      let leadSuit = null;
+      const playOrder = [];
+
+      for (let i = 0; i < 4; i++) {
+        const playerIndex = (leader + i) % 4;
+        if (playerIndex === partnerIndex) continue;
+        playOrder.push(playerIndex);
+      }
+
+      for (let playerIndex of playOrder) {
+
+        const context = this.buildContext(
+          playerIndex,
+          null,
+          trump,
+          {
+            phase: "play_card",
+            trickCards: [...trickCards],
+            leadSuit,
+            trickNumber,
+            trickLeader: leader
+          },
+          alonePlayerIndex
+        );
+
+        const action = await this.getAction(playerIndex, context);
+        console.log("HAND:", context.hand)
+        if (!action || action.type !== "play_card") {
+          throw new Error("Invalid play_card action");
+        }
+
+        const card = action.card;
+        const hand = this.room.seats[playerIndex].hand;
+
+        const cardIndex = hand.findIndex(
+          c => c.rank === card.rank && c.suit === card.suit
+        );
+
+        if (cardIndex === -1) {
+          throw new Error("Invalid card played");
+        }
+
+        if (leadSuit) {
+          const hasLeadSuit = hand.some(
+            c => getEffectiveSuit(c, trump) === leadSuit
+          );
+
+          if (hasLeadSuit &&
+              getEffectiveSuit(card, trump) !== leadSuit) {
+            throw new Error("Failed to follow suit");
+          }
+        }
+
+        hand.splice(cardIndex, 1);
+
+        if (!leadSuit) {
+          leadSuit = getEffectiveSuit(card, trump);
+        }
+
+        trickCards.push({
+          player: playerIndex,
+          card
+        });
+
+        this.room.broadcast({
+          type: "trick_update",
+          trickCards,
+          trickNumber
+        });
+      }
+
+      const winnerOffset = determineTrickWinner(
+        trickCards.map(t => t.card),
+        leadSuit,
+        trump
+      );
+
+      const winningPlayerIndex =
+        trickCards[winnerOffset].player;
+
+      tricksWon[this.getTeam(winningPlayerIndex)]++;
+
+      this.room.broadcast({
+        type: "trick_winner",
+        winner: winningPlayerIndex,
+        trickNumber
+      });
+      await new Promise(res => setTimeout(res, 1200));
+
+      leader = winningPlayerIndex;
+    }
+
+    return tricksWon;
+  }
+
+  /* ============================= */
+  /* ========= SCORING =========== */
+  /* ============================= */
+
+  scoreRound(tricksWon, makerTeam) {
+    const defendingTeam = 1 - makerTeam;
+
+    if (tricksWon[makerTeam] >= 3) {
+      this.scores[`team${makerTeam}`] +=
+        tricksWon[makerTeam] === 5 ? 2 : 1;
+    } else {
+      this.scores[`team${defendingTeam}`] += 2;
+    }
+  }
+}
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+//   startGame() {
+//     while (!this.isGameOver()) {
+//       this.playRound();
+//       this.rotateDealer();
+//     }
+
+//     console.log("Game Over", this.scores);
+//   }
+
+//   isGameOver() {
+//     return (
+//       this.scores.team0 >= this.winningScore ||
+//       this.scores.team1 >= this.winningScore
+//     );
+//   }
+
+//   rotateDealer() {
+//     this.dealerIndex = (this.dealerIndex + 1) % 4;
+//   }
+
+  // async playTricks(trump, alonePlayerIndex = null) {
+  //   let leader = (this.dealerIndex + 1) % 4;
+  //   const tricksWon = [0, 0]; // team0, team1
+
+  //   const partnerIndex =
+  //     alonePlayerIndex !== null
+  //       ? (alonePlayerIndex + 2) % 4
+  //       : null;
+
+  //   for (let trickNumber = 0; trickNumber < 5; trickNumber++) {
+  //     const trickCards = [];
+  //     let leadSuit = null;
+  //     const playOrder = [];
+
+  //     // Determine active players for this trick
+  //     for (let i = 0; i < 4; i++) {
+  //       const playerIndex = (leader + i) % 4;
+
+  //       // Skip partner if someone is going alone
+  //       if (playerIndex === partnerIndex) continue;
+
+  //       playOrder.push(playerIndex);
+  //     }
+
+  //     // Each active player plays one card
+  //     for (let playerIndex of playOrder) {
+  //       const player = this.players[playerIndex];
+
+  //       const context = this.buildContext(
+  //         playerIndex,
+  //         null,
+  //         trump,
+  //         {
+  //           trickCards: [...trickCards],
+  //           leadSuit,
+  //           trickNumber,
+  //           trickLeader: leader
+  //         },
+  //         alonePlayerIndex
+  //       );
+
+  //       const card = player.playCard(context);
+
+  //       // Engine validation (basic)
+  //       if (!card) {
+  //         throw new Error(`Player ${playerIndex} returned no card`);
+  //       }
+
+  //       // Enforce follow suit rule
+  //       if (leadSuit) {
+         
+  //         const hasLeadSuit = player.hand.some(
+  //           c => getEffectiveSuit(c, trump) === leadSuit
+  //         );
+
+  //         if (hasLeadSuit && getEffectiveSuit(card, trump) !== leadSuit) {
+  //           throw new Error(
+  //             `Player ${playerIndex} failed to follow suit`
+  //           );
+  //         }
+  //       }
+
+  //       if (!leadSuit) {
+  //         leadSuit = getEffectiveSuit(card, trump);
+  //       }
+
+  //       trickCards.push(card);
+  //       player.removeCard(card);
+  //     }
+
+  //     // Determine winner of trick
+  //     const winnerOffset = determineTrickWinner(
+  //       trickCards,
+  //       leadSuit,
+  //       trump
+  //     );
+
+  //     const winningPlayerIndex = playOrder[winnerOffset];
+
+  //     tricksWon[this.getTeam(winningPlayerIndex)]++;
+  //     console.log(
+  //     `Trick ${trickNumber + 1} winner: Player ${winningPlayerIndex}`
+  //     );
+  //     leader = winningPlayerIndex;
+  //   }
+
+  //   return tricksWon;
+  // }
+//   async playRound() {
+//     const deck = shuffle(createDeck());
+//     this.dealCards(deck);
+
+//     const upcard = deck.pop();
+//     let trump = null;
+//     let makerTeam = null;
+//     let alonePlayerIndex = null;
+
+//     // -------- FIRST ROUND --------
+//     for (let i = 1; i <= 4; i++) {
+//       const playerIndex = (this.dealerIndex + i) % 4;
+//       const player = this.players[playerIndex];
+
+//       const context = this.buildContext(playerIndex, upcard, trump);
+//       const result = await player.orderUp(context);
+      
+//       if (result.call) {
+//         trump = upcard.suit;
+//         makerTeam = this.getTeam(playerIndex);
+
+//         if (result.alone) {
+//           alonePlayerIndex = playerIndex;
+//         }
+
+//         break;
+//       }
+//     }
+
+//     // -------- SECOND ROUND --------
+//     if (!trump) {
+//       for (let i = 1; i <= 4; i++) {
+//         const playerIndex = (this.dealerIndex + i) % 4;
+//         const player = this.players[playerIndex];
+
+//         const context = this.buildContext(
+//           playerIndex,
+//           upcard,
+//           trump
+//         );
+
+//         const result = player.callTrump(context);
+
+//         if (result.call) {
+//           trump = result.suit;
+//           makerTeam = this.getTeam(playerIndex);
+
+//           if (result.alone) {
+//             alonePlayerIndex = playerIndex;
+//           }
+
+//           break;
+//         }
+
+//         // Forced dealer
+//         if (i === 4 && !trump) {
+//           const forcedResult = player.callTrumpForced(context);
+
+//           trump = forcedResult.suit;
+//           makerTeam = this.getTeam(playerIndex);
+
+//           if (forcedResult.alone) {
+//             alonePlayerIndex = playerIndex;
+//           }
+//         }
+//       }
+//     }
+
+//     console.log("Dealer:", this.dealerIndex);
+//     console.log("Trump:", trump);
+//     console.log("Maker Team:", makerTeam);
+//     if (alonePlayerIndex !== null) {
+//       console.log("Player going alone:", alonePlayerIndex);
+//     }
+
+//     const trickResults = this.playTricks(trump, alonePlayerIndex);
+
+//     this.stats.rounds++;
+
+//     this.stats.totalTricksTeam0 += trickResults[0];
+//     this.stats.totalTricksTeam1 += trickResults[1];
+
+//     if (alonePlayerIndex !== null) {
+//       this.stats.aloneCalls++;
+
+//       const makerTricks = trickResults[makerTeam];
+
+//       if (makerTricks === 5) {
+//         this.stats.aloneSweeps++;
+//       } else if (makerTricks >= 3) {
+//         this.stats.aloneWins++;
+//       } else {
+//         this.stats.aloneEuchres++;
+//       }
+//     } else {
+//       const makerTricks = trickResults[makerTeam];
+
+//       if (makerTricks === 5) {
+//         this.stats.normalSweeps++;
+//       } else if (makerTricks < 3) {
+//         this.stats.normalEuchres++;
+//       }
+//     }
+
+
+//     this.scoreRound(trickResults, makerTeam);
+
+//     return {
+//       trump,
+//       makerTeam,
+//       alonePlayerIndex
+//     };
+//   }
+
+  
+
+//   dealCards(deck) {
+//     this.players.forEach(p => (p.hand = []));
+
+//     for (let i = 0; i < 5; i++) {
+//       for (let j = 1; j <= 4; j++) {
+//         const playerIndex = (this.dealerIndex + j) % 4;
+//         this.players[playerIndex].hand.push(deck.pop());
+//       }
+//     }
+//   }
+
+//   scoreRound(tricksWon, makerTeam) {
+//     const defendingTeam = 1 - makerTeam;
+
+//     if (tricksWon[makerTeam] >= 3) {
+//       this.scores[`team${makerTeam}`] +=
+//         tricksWon[makerTeam] === 5 ? 2 : 1;
+//     } else {
+//       this.scores[`team${defendingTeam}`] += 2;
+//     }
+//   }
+//   getTeam(playerIndex) {
+//     return playerIndex % 2; // 0 & 2 vs 1 & 3
+//   }
+
+//   buildContext(
+//     playerIndex,
+//     upcard,
+//     trump,
+//     trickState = {},
+//     alonePlayerIndex = null
+//   ) {
+//     return {
+//       hand: [...this.players[playerIndex].hand],
+//       upcard,
+//       trump,
+//       dealerIndex: this.dealerIndex,
+//       myIndex: playerIndex,
+//       alonePlayerIndex,
+//       ...trickState,
+//       score: this.scores,
+//     };
+//   }
+// }

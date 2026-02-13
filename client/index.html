@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Euchre</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- =========================
+     LANDING SCREEN
+========================= -->
+<div id="landing-screen" class="screen active">
+  <div class="landing-container">
+  <h1 class="title">Euchre</h1>
+    <div class="landing-card">
+      <input
+        id="player-name-input"
+        type="text"
+        placeholder="Enter your name"
+        maxlength="20"
+      />
+
+      <button id="play-ai-btn" class="landing-btn primary">
+        Play vs AI
+      </button>
+
+      <button id="create-lobby-btn" class="landing-btn">
+        Create Lobby
+      </button>
+
+      <div class="join-row">
+        <input
+          id="join-code-input"
+          type="text"
+          placeholder="Lobby Code"
+          maxlength="6"
+        />
+        <button id="join-lobby-btn" class="landing-btn">
+          Join Lobby
+        </button>
+      </div>
+  </div>
+</div>
+</div>
+
+
+
+<!-- =========================
+     LOBBY SCREEN
+========================= -->
+<div id="lobby-screen" class="screen">
+  <div class="lobby-container">
+    <div id="lobby-code-display" class="lobby-code"></div>
+    <div class="lobby-table">
+
+      <div class="lobby-seat seat-top" data-seat="2"></div>
+      <div class="lobby-seat seat-left" data-seat="1"></div>
+      <div class="lobby-seat seat-right" data-seat="3"></div>
+      <div class="lobby-seat seat-bottom" data-seat="0"></div>
+
+    </div>
+
+    <div class="lobby-controls">
+      <button id="add-ai-btn" class="control-btn">Add AI</button>
+      <button id="start-game-btn" class="control-btn primary">Start Game</button>
+      <button id="leave-lobby-btn" class="control-btn pass">Leave</button>
+      <select id="ai-type">
+        <option value="simple">Simple AI</option>
+      </select>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- =========================
+     GAME SCREEN
+========================= -->
+<div id="game-screen" class="screen">
+
+  <h2>Euchre Multiplayer</h2>
+
+  <div id="status"></div>
+  <div id="scores"></div>
+  <div id="trick-info"></div>
+  <div id="trump-indicator"></div>
+
+  <div id="table">
+    <div id="player-names-layer"></div>
+    <div id="upcard-layer"></div>
+
+    <div id="player-top" class="seat">
+      <div class="seat-markers"></div>
+      <div class="hand"></div>
+      <div class="upcard-slot"></div>
+    </div>
+    <div id="player-left" class="seat">
+      <div class="seat-markers"></div>
+      <div class="hand"></div>
+      <div class="upcard-slot"></div>
+    </div>
+    <div id="player-right" class="seat">
+      <div class="seat-markers"></div>
+      <div class="hand"></div>
+      <div class="upcard-slot"></div>
+    </div>
+    <div id="player-bottom" class="seat">
+      <div class="seat-markers"></div>
+      <div class="hand"></div>
+      <div class="upcard-slot"></div>
+    </div>
+    <div id="trick-area"></div>
+  </div>
+  <div id="bottom-name" class="bottom-name"></div>
+  <div id="controls"></div>
+
+</div>
+
+
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="main.js"></script>
+
+</body>
