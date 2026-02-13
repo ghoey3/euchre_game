@@ -115,3 +115,15 @@ function getDealerUpcardPosition(dealerIndex, mySeatIndex) {
 
   return { left, top, transform };
 }
+
+export function clearCutCard() {
+  const cutCard = document.querySelector(".cut-card");
+
+  if (!cutCard) return;
+
+  cutCard.classList.add("fade-out");
+
+  setTimeout(() => {
+    cutCard.remove();
+  }, 400);
+}

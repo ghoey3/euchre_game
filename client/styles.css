@@ -932,21 +932,67 @@ body {
   transform: translateX(-50%);
 }
 
-/* Left seat — move inward */
 #player-left .seat-markers {
-  right: -50px;
-  top: calc(50% + 12px);
+  right: -30px;   /* was -50px */
+  top: 50%;
   transform: translateY(-50%);
 }
 
-/* Right seat — move inward */
 #player-right .seat-markers {
-  left: -50px;
-  top: calc(50% + 12px);
+  left: -30px;    /* was -50px */
+  top: 50%;
   transform: translateY(-50%);
 }
 
 #player-left .seat-markers,
 #player-right .seat-markers {
   flex-direction: column;
+}
+
+
+/* =========================
+   INVALID MOVE SHAKE
+========================= */
+
+@keyframes shakeError {
+  0%   { transform: translateX(0); }
+  20%  { transform: translateX(-8px); }
+  40%  { transform: translateX(8px); }
+  60%  { transform: translateX(-6px); }
+  80%  { transform: translateX(6px); }
+  100% { transform: translateX(0); }
+}
+
+#table.shake-error {
+  animation: shakeError 0.4s ease;
+}
+
+/* =========================
+   ERROR TOAST
+========================= */
+
+.error-toast {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 18px;
+  background: rgba(180, 0, 0, 0.9);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 0 20px rgba(255,0,0,0.5);
+  backdrop-filter: blur(6px);
+  animation: fadeUp 0.2s ease-out;
+  z-index: 9999;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translate(-50%, 10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Optional click lock */
+.input-locked * {
+  pointer-events: none;
 }

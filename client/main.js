@@ -10,7 +10,7 @@ import { renderSpeechBubble } from "./ui/renderSpeechBubble.js";
 import { renderTrickInfo } from "./ui/renderTrickInfo.js";
 import { renderPlayerNames } from "./ui/renderPlayerNames.js";
 import { updateSeatMarkers } from "./ui/renderSeatMarkers.js";  
-import { renderCutCardAnimation } from "./ui/renderCutCardAnimation.js"
+import { renderCutCardAnimation, clearCutCard} from "./ui/renderCutCardAnimation.js"
 
 
 const socket = io();
@@ -674,7 +674,7 @@ socket.on("game_event", (message) => {
         clearUpcard();
       }
       break;
-      
+
     case "dealer_cut_card": {
       const { seatIndex, card } = message;
       renderCutCardAnimation(seatIndex, state.mySeatIndex, card);
@@ -682,7 +682,7 @@ socket.on("game_event", (message) => {
     }
     case "dealer_selected":
       state.round.dealerIndex = message.dealerIndex;
-
+      clearCutCard()
       updateSeatMarkers({
         dealerIndex: state.round.dealerIndex,
         leaderIndex: null,
@@ -691,8 +691,47 @@ socket.on("game_event", (message) => {
 
       statusDiv.textContent = "Dealer selected!";
       break;
+
+    case "invalid_move":
+      showInvalidMove(message.message);
+      break;
+
+    case "invalid_move_fatal":
+      showInvalidMove(message.message, true);
+      break;
   }
 });
+
+function showInvalidMove(text, fatal = false) {
+
+  const table = document.getElementById("table");
+
+  // Add shake
+  table.classList.add("shake-error");
+
+  // Optional floating message
+  const msg = document.createElement("div");
+  msg.className = "error-toast";
+  msg.textContent = text;
+
+  document.body.appendChild(msg);
+
+  // Remove after animation
+  setTimeout(() => {
+    table.classList.remove("shake-error");
+  }, 400);
+
+  setTimeout(() => {
+    msg.remove();
+  }, 2000);
+
+  // Optional: lock clicks briefly
+  document.body.classList.add("input-locked");
+
+  setTimeout(() => {
+    document.body.classList.remove("input-locked");
+  }, 600);
+}
 
 
 function updateBacks(state) {

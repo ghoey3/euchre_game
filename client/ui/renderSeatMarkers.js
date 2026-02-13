@@ -42,3 +42,14 @@ export function updateSeatMarkers({ dealerIndex, leaderIndex, mySeatIndex }) {
     markerContainer.appendChild(marker);
   });
 }
+
+export function clearSeatMarkers() {
+  document.querySelectorAll(".seat").forEach(seat => {
+
+    const container = seat.querySelector(".seat-markers");
+
+    if (!container) return;
+
+    container.innerHTML = "";
+  });
+}

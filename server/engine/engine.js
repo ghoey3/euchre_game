@@ -8,6 +8,7 @@ export default class GameEngine {
     this.dealerIndex = null;
     this.scores = { team0: 0, team1: 0 };
     this.winningScore = 10;
+    this.invalidMoveCounts = {}
   }
 
   /* ============================= */
@@ -381,6 +382,7 @@ export default class GameEngine {
         : null;
 
     for (let trickNumber = 0; trickNumber < 5; trickNumber++) {
+
       this.room.broadcast({
         type: "trick_start",
         trickLeader: leader
@@ -388,8 +390,8 @@ export default class GameEngine {
 
       const trickCards = [];
       let leadSuit = null;
-      const playOrder = [];
 
+      const playOrder = [];
       for (let i = 0; i < 4; i++) {
         const playerIndex = (leader + i) % 4;
         if (playerIndex === partnerIndex) continue;
@@ -397,50 +399,66 @@ export default class GameEngine {
       }
 
       for (let playerIndex of playOrder) {
+        this.invalidMoveCounts[playerIndex] = 0;
+        const seat = this.room.seats[playerIndex];
+        let validPlay = false;
+        let card;
 
-        const context = this.buildContext(
-          playerIndex,
-          null,
-          trump,
-          {
-            phase: "play_card",
-            trickCards: [...trickCards],
-            leadSuit,
-            trickNumber,
-            trickLeader: leader
-          },
-          alonePlayerIndex
-        );
+        while (!validPlay) {
 
-        const action = await this.getAction(playerIndex, context);
-        console.log("HAND:", context.hand)
-        if (!action || action.type !== "play_card") {
-          throw new Error("Invalid play_card action");
-        }
-
-        const card = action.card;
-        const hand = this.room.seats[playerIndex].hand;
-
-        const cardIndex = hand.findIndex(
-          c => c.rank === card.rank && c.suit === card.suit
-        );
-
-        if (cardIndex === -1) {
-          throw new Error("Invalid card played");
-        }
-
-        if (leadSuit) {
-          const hasLeadSuit = hand.some(
-            c => getEffectiveSuit(c, trump) === leadSuit
+          const context = this.buildContext(
+            playerIndex,
+            null,
+            trump,
+            {
+              phase: "play_card",
+              trickCards: [...trickCards],
+              leadSuit,
+              trickNumber,
+              trickLeader: leader
+            },
+            alonePlayerIndex
           );
 
-          if (hasLeadSuit &&
-              getEffectiveSuit(card, trump) !== leadSuit) {
-            throw new Error("Failed to follow suit");
+          const action = await this.getAction(playerIndex, context);
+
+          if (!action || action.type !== "play_card") {
+            if (seat.type === "ai") {
+              throw new Error(`AI returned invalid action`);
+            }
+            this.sendInvalidMove(playerIndex, "Invalid action.");
+            continue;
           }
+
+          const validationError =
+            this.validateCardPlay(
+              playerIndex,
+              action.card,
+              leadSuit,
+              trump
+            );
+
+          if (validationError) {
+            if (seat.type === "ai") {
+              throw new Error(
+                `AI cheat detected: ${validationError}`
+              );
+            }
+
+            this.sendInvalidMove(playerIndex, validationError);
+            continue; // 🔥 retry loop
+          }
+
+          card = action.card;
+          validPlay = true;
         }
 
-        hand.splice(cardIndex, 1);
+        // Remove card after successful validation
+        const hand = seat.hand;
+        const index = hand.findIndex(
+          c => c.rank === card.rank && c.suit === card.suit
+        );
+        hand.splice(index, 1);
 
         if (!leadSuit) {
           leadSuit = getEffectiveSuit(card, trump);
@@ -474,12 +492,66 @@ export default class GameEngine {
         winner: winningPlayerIndex,
         trickNumber
       });
-      await new Promise(res => setTimeout(res, 1200));
+
+      await sleep(1200);
 
       leader = winningPlayerIndex;
     }
 
     return tricksWon;
+  }
+
+  validateCardPlay(playerIndex, card, leadSuit, trump) {
+
+    const seat = this.room.seats[playerIndex];
+    const hand = seat.hand;
+
+    const cardIndex = hand.findIndex(
+      c => c.rank === card.rank && c.suit === card.suit
+    );
+
+    if (cardIndex === -1) {
+      return "You do not have that card.";
+    }
+
+    if (!leadSuit) return null;
+
+    const hasLeadSuit = hand.some(
+      c => getEffectiveSuit(c, trump) === leadSuit
+    );
+
+    if (
+      hasLeadSuit &&
+      getEffectiveSuit(card, trump) !== leadSuit
+    ) {
+      return "You must follow suit.";
+    }
+
+    return null;
+  }
+
+  sendInvalidMove(playerIndex, message) {
+
+    const seat = this.room.seats[playerIndex];
+
+    if (!seat?.socket) return;
+
+    this.invalidMoveCounts[playerIndex] ??= 0;
+    this.invalidMoveCounts[playerIndex]++;
+
+    // 🔥 Rate limit: 5 bad attempts max
+    if (this.invalidMoveCounts[playerIndex] > 5) {
+      seat.socket.emit("game_event", {
+        type: "invalid_move_fatal",
+        message: "Too many invalid attempts."
+      });
+      throw new Error(`Player ${playerIndex} exceeded invalid move limit`);
+    }
+
+    seat.socket.emit("game_event", {
+      type: "invalid_move",
+      message
+    });
   }
 
   /* ============================= */
