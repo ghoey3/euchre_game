@@ -1,4 +1,4 @@
-export default function renderUpcard(upcard, dealerIndex, mySeatIndex) {
+export function renderUpcard(upcard, dealerIndex, mySeatIndex) {
   const layer = document.getElementById("upcard-layer");
   layer.innerHTML = "";
   if (!upcard) return;
@@ -105,4 +105,16 @@ export default function renderUpcard(upcard, dealerIndex, mySeatIndex) {
       break;
     }
   }
+}
+
+export function clearUpcard() {
+  const upcard = document.querySelector(".upcard");
+
+  if (!upcard) return;
+
+  upcard.classList.add("fade-out");
+
+  setTimeout(() => {
+    upcard.remove();
+  }, 400);
 }

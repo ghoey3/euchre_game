@@ -4,7 +4,7 @@ import renderHand from "./ui/renderHand.js";
 import renderScores from "./ui/renderScores.js";
 import renderBacks from "./ui/renderBacks.js";
 import renderTrump from "./ui/renderTrump.js";
-import renderUpcard from "./ui/renderUpcard.js";
+import { renderUpcard, clearUpcard } from "./ui/renderUpcard.js";
 import { renderAloneIndicator, highlightActivePlayer, clearActiveHighlight } from "./ui/renderIndicators.js";
 import { renderSpeechBubble } from "./ui/renderSpeechBubble.js";
 import { renderTrickInfo } from "./ui/renderTrickInfo.js";
@@ -673,6 +673,11 @@ socket.on("game_event", (message) => {
       //   dealerIndex: this.dealerIndex
       // });
       break;
+    case "phase_change":
+      let phase = message.phase;
+      if (phase === 'call_trump') {
+        clearUpcard();
+      }
   }
 });
 
