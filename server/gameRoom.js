@@ -1,10 +1,10 @@
 import GameEngine from "./engine/engine.js";
 
 export default class GameRoom {
-  constructor(roomId, io, mode = 'lobby') {
+  constructor(roomId, io, mode = 'lobby', onDestroy = null) {
     this.roomId = roomId;
     this.io = io;
-
+    this.onDestroy = onDestroy;
     this.seats = [null, null, null, null];
     this.pendingActions = {};
 
@@ -18,6 +18,19 @@ export default class GameRoom {
       1: generateTeamName()
     };
     this.mode = mode 
+    this.lastActivity = Date.now();
+
+    this.cleanupInterval = setInterval(() => {
+
+      const isEmpty = !this.hasHumans();
+      const isIdle = Date.now() - this.lastActivity > 30 * 60 * 1000;
+
+      // Only destroy if empty OR idle and no game running
+      if (isEmpty || (isIdle && !this.started)) {
+        this.destroy();
+      }
+
+    }, 5 * 60 * 1000);
   }
 
   /* ------------------------------------------------ */
@@ -49,7 +62,7 @@ export default class GameRoom {
     this.broadcastLobbyState();
 
     console.log("Human joined seat:", seatIndex);
-
+    this.lastActivity = Date.now();
     return seatIndex;
   }
 
@@ -105,7 +118,7 @@ export default class GameRoom {
       const nextHuman = this.seats.find(seat => seat?.type === "human");
       this.hostSocketId = nextHuman?.socket.id || null;
     }
-
+    this.lastActivity = Date.now();
     this.broadcastLobbyState();
   }
 
@@ -195,6 +208,8 @@ export default class GameRoom {
   }
 
   handlePlayerAction(playerIndex, action) {
+    this.lastActivity = Date.now();
+
     const resolver = this.pendingActions[playerIndex];
     if (!resolver) return;
 
@@ -314,6 +329,50 @@ export default class GameRoom {
 
     this.broadcastLobbyState();
   }
+  destroy() {
+
+    if (this._destroyed) return;
+    this._destroyed = true;
+
+    console.log(`Destroying room ${this.roomId}`);
+
+    // Stop cleanup timer
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+
+    // Notify connected humans
+    this.broadcast({
+      type: "room_closed"
+    });
+
+    // Remove all humans from socket room
+    for (const seat of this.seats) {
+
+      if (seat?.type === "human" && seat.socket) {
+        try {
+          seat.socket.leave(this.roomId);
+          seat.socket.data.roomId = null;
+          seat.socket.data.seatIndex = null;
+        } catch {}
+      }
+    }
+
+    // Clear seats
+    this.seats = [null, null, null, null];
+
+    // Reset state
+    this.engine = null;
+    this.started = false;
+
+    // Remove from global rooms map
+    if (typeof this.onDestroy === "function") {
+      this.onDestroy();
+    }
+
+    this.io = null;
+  }
 
 
 
@@ -381,3 +440,4 @@ function generateTeamName() {
 
   return `${adj} ${noun}`;
 }
+

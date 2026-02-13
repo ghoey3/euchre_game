@@ -5,13 +5,34 @@ import GameRoom from "./gameRoom.js";
 import SimpleAIStrategy from "./ai/simpleAI.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+const limiter = rateLimit({
+  windowMs: 60 * 1000,     // 1 minute
+  max: 120,                // 120 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.use(limiter);
+app.use(helmet());
+app.use(express.json({ limit: "10kb" }));
+
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server)
+// const io = new Server(server, {
+//   cors: {
+//     origin: ["http://localhost:3000"],
+//     // origin: ["https://yourdomain.up.railway.app"], //CHANGE THIS 
+//     methods: ["GET", "POST"]
+//   }
+// });
 
 app.use(express.static(path.join(__dirname, "../client")));
 
@@ -20,6 +41,26 @@ const rooms = new Map(); // 🔥 multiple rooms now
 function generateCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
+
+const connectionCounts = new Map();
+
+io.use((socket, next) => {
+  const ip = socket.handshake.address;
+
+  const count = connectionCounts.get(ip) || 0;
+
+  if (count > 20) {
+    return next(new Error("Too many connections"));
+  }
+
+  connectionCounts.set(ip, count + 1);
+
+  socket.on("disconnect", () => {
+    connectionCounts.set(ip, connectionCounts.get(ip) - 1);
+  });
+
+  next();
+});
 
 io.on("connection", socket => {
 
@@ -58,10 +99,19 @@ io.on("connection", socket => {
      CREATE LOBBY
   ========================= */
   socket.on("create_lobby", ({ name }) => {
+    if (!data || typeof data.name !== "string") return;
+    const name = data.name.trim().slice(0, 24);
+    if (!name) return;
 
+    if (rooms.size > 200) {
+      socket.emit("error_message", "Server busy.");
+      return;
+    }
     const code = generateCode();
 
-    const room = new GameRoom(code, io, 'lobby');
+    const room = new GameRoom(code, io, "lobby", () => {
+      rooms.delete(code);
+    });
     rooms.set(code, room);
 
     room.addHumanPlayer(socket, name);
