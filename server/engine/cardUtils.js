@@ -17,17 +17,18 @@ export function getCardPower(card, leadSuit, trump) {
   if (isRightBower(card, trump)) return 100;
   if (isLeftBower(card, trump)) return 99;
 
-  if (card.suit === trump) {
+  const effectiveSuit = getEffectiveSuit(card, trump);
+
+  if (effectiveSuit === trump) {
     return 80 + rankValue(card.rank);
   }
 
-  if (card.suit === leadSuit) {
+  if (effectiveSuit === leadSuit) {
     return 40 + rankValue(card.rank);
   }
 
   return 0;
 }
-
 export function getEffectiveSuit(card, trump) {
   // Left bower becomes trump suit
   if (

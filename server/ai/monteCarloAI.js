@@ -1,156 +1,171 @@
 import BaseAI from "./baseAI.js";
 import SimpleAI from "./simpleAI.js";
+
+import OrderUpSimulator from "./simulation/orderUpSimulator.js";
+import PlaySimulator from "./simulation/playCardSimulator.js";
+import PlayDecisionSim from "./simulation/playDecisionSimulator.js";
+
+import { createDeck, shuffle } from "../engine/deck.js";
 import { getEffectiveSuit } from "../engine/cardUtils.js";
 
-/*
-  MonteCarloAI
-  - Extends BaseAI
-  - Delegates heuristic logic to SimpleAI
-  - Overrides play_card with Monte Carlo
-*/
+const DEBUG = false;
 
 export default class MonteCarloAI extends BaseAI {
 
   constructor(options = {}) {
     super("MonteCarloAI");
 
-    this.simulationsPerMove = options.simulationsPerMove ?? 200;
-    this.explorationThreshold = options.explorationThreshold ?? 1;
+    this.simPlay = options.simulationsPerMove ?? 200;
+    this.simOrder = options.simulationsPerOrderUp ?? 600;
 
-    // Heuristic fallback
     this.fallbackAI = new SimpleAI();
+
+    this.playDecision = new PlayDecisionSim({
+      simulations: this.simPlay,
+      playoutAI: this.fallbackAI
+    });
   }
 
-  /* ============================= */
-  /* ========= BIDDING =========== */
-  /* ============================= */
+  /* ================= ORDER UP ================= */
 
   orderUp(context) {
-    return this.fallbackAI.orderUp(context);
+
+    let callScore = 0;
+
+    for (let i = 0; i < this.simOrder; i++) {
+
+      const simCtx = JSON.parse(JSON.stringify(context));
+
+      simCtx.trump = context.upcard.suit;
+      simCtx.makerTeam = context.myIndex % 2;
+
+      const fixedHands = this.sampleDeal(simCtx);
+
+      const sim = new OrderUpSimulator({
+        rootContext: simCtx,
+        playoutAI: this.fallbackAI,
+        fixedHands,
+        simulatePickup: true
+      });
+
+      callScore += sim.run();
+    }
+
+    const avg = callScore / this.simOrder;
+
+    if (DEBUG) {
+      console.log("ORDER avg EV:", avg.toFixed(3));
+    }
+
+    return {
+      call: avg > .4,
+      alone: avg > 2.5
+    };
   }
 
-  callTrump(context) {
-    return this.fallbackAI.callTrump(context);
-  }
-
-  callTrumpForced(context) {
-    return this.fallbackAI.callTrumpForced(context);
-  }
-
-  getDiscard(context) {
-    return this.fallbackAI.getDiscard(context);
-  }
-
-  /* ============================= */
-  /* ========= CARD PLAY ========= */
-  /* ============================= */
+  /* ================= PLAY CARD ================= */
 
   playCard(context) {
-    const { hand, leadSuit, trump } = context;
 
-    const legalMoves = this.getLegalCards(hand, leadSuit, trump);
+    const card = this.playDecision.chooseCard(context);
 
-    // If trivial, use heuristic
-    if (legalMoves.length <= this.explorationThreshold) {
-      return this.fallbackAI.playCard(context);
-    }
+    //console.log("PLAY decision:", card);
 
-    return this.runMonteCarlo(context, legalMoves);
+    return card;
   }
 
-  /* ============================= */
-  /* ========= LEGAL MOVES ======= */
-  /* ============================= */
+  /* ================= SAMPLERS ================= */
 
-  getLegalCards(hand, leadSuit, trump) {
-    if (!leadSuit) return hand;
+  sampleDeal(context) {
 
-    const follow = hand.filter(
-      c => getEffectiveSuit(c, trump) === leadSuit
+    const deck = createDeck();
+
+    const known = [
+      ...context.hand,
+      context.upcard
+    ].filter(Boolean);
+
+    let remaining = deck.filter(c =>
+      !known.some(k => k.rank === c.rank && k.suit === c.suit)
     );
 
-    return follow.length > 0 ? follow : hand;
+    shuffle(remaining);
+
+    const hands = {0:[],1:[],2:[],3:[]};
+    hands[context.myIndex] = [...context.hand];
+
+    for (let p = 0; p < 4; p++) {
+
+      if (p === context.myIndex) continue;
+
+      hands[p] = remaining.splice(0, 5);
+    }
+
+    return hands;
   }
 
-  /* ============================= */
-  /* ========= MONTE CARLO ======= */
-  /* ============================= */
+  sampleWorld(context) {
 
-  runMonteCarlo(context, legalMoves) {
+    const deck = createDeck();
 
-    let bestCard = legalMoves[0];
-    let bestEV = -Infinity;
+    const known = [
+      ...context.hand,
+      ...(context.playedCards || []),
+      ...(context.trickCards || []).map(t => t.card)
+    ].filter(Boolean);
 
-    for (const candidate of legalMoves) {
+    let remaining = deck.filter(c =>
+      !known.some(k => k.rank === c.rank && k.suit === c.suit)
+    );
 
-      let totalEV = 0;
+    shuffle(remaining);
 
-      for (let i = 0; i < this.simulationsPerMove; i++) {
+    const hands = {0:[],1:[],2:[],3:[]};
+    hands[context.myIndex] = [...context.hand];
 
-        const simState = this.createSimulationState(
-          context,
-          candidate
-        );
+    const target = context.hand.length;
+    const trump = context.trump;
+    const voidInfo = context.voidInfo || {0:{},1:{},2:{},3:{}};
 
-        const ev = this.simulateFromState(simState);
+    // deal one card at a time to respect constraints
+    for (let p = 0; p < 4; p++) {
 
-        totalEV += ev;
-      }
+      if (p === context.myIndex) continue;
 
-      const avgEV = totalEV / this.simulationsPerMove;
+      while (hands[p].length < target && remaining.length > 0) {
 
-      if (avgEV > bestEV) {
-        bestEV = avgEV;
-        bestCard = candidate;
+        // try to find valid card
+        let idx = remaining.findIndex(card => {
+
+          const eff = getEffectiveSuit(card, trump);
+          return !voidInfo[p]?.[eff];
+        });
+
+        // fallback if no valid card (constraints impossible)
+        if (idx === -1) idx = 0;
+
+        const card = remaining.splice(idx, 1)[0];
+        hands[p].push(card);
       }
     }
 
-    return bestCard;
+    return hands;
   }
 
-  /* ============================= */
-  /* ===== SIMULATION HELPERS ==== */
-  /* ============================= */
-
-  createSimulationState(context, candidateCard) {
-    // TODO:
-    // - clone state
-    // - remove candidate
-    // - assign unknown cards
-    // - copy void info
-    return {};
-  }
-
-  simulateFromState(simState) {
-    // TODO:
-    // - use RoundSimulator
-    // - return EV relative to this player
-    return 0;
-  }
-
-  /* ============================= */
-  /* ========= ACTION ROUTER ===== */
-  /* ============================= */
+  /* ================= ACTION ================= */
 
   getAction(context) {
+
     switch (context.phase) {
-      case "play_card":
-        return { type: "play_card", card: this.playCard(context) };
 
       case "order_up":
         return { type: "order_up", ...this.orderUp(context) };
 
-      case "call_trump":
-        return { type: "call_trump", ...this.callTrump(context) };
-
-      case "call_trump_forced":
-        return { type: "call_trump_forced", ...this.callTrumpForced(context) };
-
-      case "discard":
-        return this.getDiscard(context);
+      case "play_card":
+        return { type: "play_card", card: this.playCard(context) };
 
       default:
-        throw new Error("Unknown phase: " + context.phase);
+        return this.fallbackAI.getAction(context);
     }
   }
 }

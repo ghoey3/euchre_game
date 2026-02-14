@@ -237,7 +237,8 @@ export default class AIGameEngine {
     const tricksWon = this.playTricks(
         hands,
         trump,
-        alonePlayerIndex
+        alonePlayerIndex,
+        makerTeam
     );
 
     this.scoreRound(tricksWon, makerTeam, alonePlayerIndex);
@@ -247,112 +248,127 @@ export default class AIGameEngine {
   /* ========= TRICKS ============ */
   /* ============================= */
 
-  playTricks(hands, trump, alonePlayerIndex) {
-    let leader = (this.dealerIndex + 1) % 4;
-    const tricksWon = [0, 0];
+  playTricks(hands, trump, alonePlayerIndex, makerTeam) {
+
+    let leader = this.simLeader ?? (this.dealerIndex + 1) % 4;
+
+    const tricksWon = this.simTricksWon
+      ? [this.simTricksWon.team0, this.simTricksWon.team1]
+      : [0, 0];
+
+    // ⭐ clone — never share reference
+    let played_cards = this.simPlayedCards
+      ? [...this.simPlayedCards]
+      : [];
 
     const partnerIndex =
-        alonePlayerIndex !== null
+      alonePlayerIndex !== null
         ? (alonePlayerIndex + 2) % 4
         : null;
 
-    for (let trick = 0; trick < 5; trick++) {
-        let trickCards = [];
-        let leadSuit = null;
+    const tricksCompleted = tricksWon[0] + tricksWon[1];
 
-        const playOrder = [];
-        for (let i = 0; i < 4; i++) {
+    for (let trick = 0; trick < 5 - tricksCompleted; trick++) {
+
+      let trickCards =
+        trick === 0 && this.simTrickCards?.length
+          ? this.simTrickCards.map(t => ({ ...t }))
+          : [];
+
+      let leadSuit =
+        trick === 0
+          ? this.simLeadSuit ?? null
+          : null;
+
+      const playOrder = [];
+
+      for (let i = 0; i < 4; i++) {
+
         const p = (leader + i) % 4;
-        if (p === partnerIndex) continue;
-        playOrder.push(p);
-        }
 
-        for (let playerIndex of playOrder) {
+        if (p === partnerIndex) continue;
+
+        // skip players who already played
+        if (!trickCards.some(t => t.player === p)) {
+          playOrder.push(p);
+        }
+      }
+
+      for (let playerIndex of playOrder) {
 
         const action = this.players[playerIndex].getAction({
-            phase: "play_card",
-            hand: hands[playerIndex],
-            trump,
-            trickCards,
-            leadSuit,
-            trickNumber: trick,
-            trickLeader: leader,
-            myIndex: playerIndex,
-            alonePlayerIndex,
-            voidInfo: this.voidInfo,
-            score: this.scores
+          phase: "play_card",
+          hand: hands[playerIndex],
+          trump,
+          trickCards,
+          leadSuit,
+          played_cards,
+          trickLeader: leader,
+          myIndex: playerIndex,
+          alonePlayerIndex,
+          voidInfo: this.voidInfo,
+          tricksSoFar: {
+            team0: tricksWon[0],
+            team1: tricksWon[1]
+          },
+          makerTeam
         });
 
-        /* ========= VALIDATION ========= */
-
-        if (!action || action.type !== "play_card") {
-            throw new Error(
-            `Player ${playerIndex} returned invalid play_card action`
-            );
+        if (!action || action.type !== "play_card" || !action.card) {
+          throw new Error(`Invalid play from player ${playerIndex}`);
         }
 
         const card = action.card;
-
-        // 1️⃣ Must actually have the card
         const hand = hands[playerIndex];
+
         const cardIndex = hand.findIndex(
-            c => c.rank === card.rank && c.suit === card.suit
+          c => c.rank === card.rank && c.suit === card.suit
         );
 
         if (cardIndex === -1) {
-            throw new Error(
-            `Illegal play: Player ${playerIndex} does not have ${card.rank} of ${card.suit}`
-            );
+          throw new Error(`Illegal play: player ${playerIndex} does not have card`);
         }
 
-        // 2️⃣ Must follow suit if able
         if (leadSuit) {
-            const hasLeadSuit = hand.some(
+
+          const hasLeadSuit = hand.some(
             c => getEffectiveSuit(c, trump) === leadSuit
-            );
+          );
 
-            const effective = getEffectiveSuit(card, trump);
+          const effective = getEffectiveSuit(card, trump);
 
-            if (hasLeadSuit && effective !== leadSuit) {
-            throw new Error(
-                `Illegal play: Player ${playerIndex} failed to follow suit`
-            );
-            }
+          if (hasLeadSuit && effective !== leadSuit) {
+            throw new Error(`Illegal play: player ${playerIndex} failed to follow suit`);
+          }
         }
 
-        /* ========= APPLY PLAY ========= */
-
+        played_cards.push(card);
         hand.splice(cardIndex, 1);
 
-        if (leadSuit) {
-            const effective = getEffectiveSuit(card, trump);
-            if (effective !== leadSuit) {
-            this.voidInfo[playerIndex][leadSuit] = true;
-            }
-        }
-
         if (!leadSuit) {
-            leadSuit = getEffectiveSuit(card, trump);
+          leadSuit = getEffectiveSuit(card, trump);
         }
 
         trickCards.push({ player: playerIndex, card });
         this.playedCards.push(card);
-        }
+      }
 
-        const winnerOffset = determineTrickWinner(
+      if (!trickCards.length) continue;
+
+      const winnerOffset = determineTrickWinner(
         trickCards.map(t => t.card),
         leadSuit,
         trump
-        );
+      );
 
-        const winner = trickCards[winnerOffset].player;
-        tricksWon[this.getTeam(winner)]++;
-        leader = winner;
+      const winner = trickCards[winnerOffset].player;
+
+      tricksWon[this.getTeam(winner)]++;
+      leader = winner;
     }
 
     return tricksWon;
-    }
-
+  }
   /* ============================= */
   /* ========= SCORING =========== */
   /* ============================= */
@@ -432,5 +448,8 @@ export default class AIGameEngine {
 
   getStats() {
     return this.trackStats ? this.stats : null;
+  }
+  resetGame() {
+    this.scores = { team0: 0, team1: 0 };
   }
 }

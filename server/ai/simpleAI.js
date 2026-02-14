@@ -96,23 +96,82 @@ export default class SimpleAI extends BaseAI {
     const trump = context.upcard.suit;
     const score = this.evaluateHand(context.hand, trump);
 
-    const isDealer = context.myIndex === context.dealerIndex;
+    const myIndex = context.myIndex;
+    const dealerIndex = context.dealerIndex;
+    const myTeam = myIndex % 2;
+    const dealerTeam = dealerIndex % 2;
 
-    if (score >= 95) {
-      return { call: true, alone: score >= 115 };
+    const isDealer = myIndex === dealerIndex;
+    const partnerIsDealer = myTeam === dealerTeam && !isDealer;
+    const opponentIsDealer = myTeam !== dealerTeam;
+
+    /* =============================
+      Upcard Strength Adjustment
+    ============================= */
+
+    const upcard = context.upcard;
+    let upcardBonus = 0;
+
+    if (upcard.rank === "J") {
+      // Right bower is huge
+      upcardBonus = 15;
+    } else if (upcard.rank === "A") {
+      upcardBonus = 10;
+    } else if (upcard.rank === "K") {
+      upcardBonus = 6;
+    } else if (upcard.rank === "Q") {
+      upcardBonus = 4;
+    } else {
+      upcardBonus = 0; // 9 / 10 weak
     }
 
-    if (score <= 70) {
-      return { call: false, alone: false };
+    let adjustedScore = score + upcardBonus;
+
+    /* =============================
+      Dealer / Team Adjustments
+    ============================= */
+
+    // Partner picking up → we gain full value
+    if (partnerIsDealer) {
+      adjustedScore += 8;
     }
 
-    if (isDealer && score >= 85) {
-      return { call: true, alone: false };
+    // We are dealer → moderate bonus
+    if (isDealer) {
+      adjustedScore += 5;
     }
 
-    return { call: false, alone: false }
-}
+    // Opponent dealer → more cautious
+    if (opponentIsDealer) {
+      adjustedScore -= 8;
+    }
 
+    /* =============================
+      Decision Thresholds
+    ============================= */
+
+    // Strong call
+    if (adjustedScore >= 105) {
+      return {
+        call: true,
+        alone: adjustedScore >= 125
+      };
+    }
+
+    // Medium call
+    if (adjustedScore >= 90) {
+      return {
+        call: true,
+        alone: false
+      };
+    }
+
+    return {
+      call: false,
+      alone: false
+    };
+  }
+  
   callTrump(context) {
     let bestSuit = null;
     let bestScore = -Infinity;

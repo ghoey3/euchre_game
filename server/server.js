@@ -98,11 +98,14 @@ io.on("connection", socket => {
   /* =========================
      CREATE LOBBY
   ========================= */
-  socket.on("create_lobby", ({ name }) => {
-    if (!data || typeof data.name !== "string") return;
-    const name = data.name.trim().slice(0, 24);
-    if (!name) return;
+  socket.on("create_lobby", (payload = {}) => {
 
+    let name =
+      typeof payload.name === "string"
+        ? payload.name.trim().slice(0, 24)
+        : "";
+
+    if (!name) return;
     if (rooms.size > 200) {
       socket.emit("error_message", "Server busy.");
       return;
