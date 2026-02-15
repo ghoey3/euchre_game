@@ -235,6 +235,32 @@ body {
   background: rgba(255,255,255,0.3);
 }
 
+#ai-type {
+  background: #0f3d1f;
+  color: #e6ffe6;
+
+  border: 2px solid #1f7a3a;
+  border-radius: 8px;
+
+  padding: 8px 12px;
+  font-size: 14px;
+
+  box-shadow: 0 0 6px rgba(0,255,120,0.25);
+  outline: none;
+
+  transition: all 0.2s ease;
+}
+
+#ai-type:hover {
+  border-color: #2bd16f;
+  box-shadow: 0 0 10px rgba(0,255,120,0.4);
+}
+
+#ai-type:focus {
+  border-color: #39ff88;
+  box-shadow: 0 0 12px rgba(0,255,120,0.6);
+}
+
 .lobby-code {
   font-size: 18px;
   font-weight: 600;

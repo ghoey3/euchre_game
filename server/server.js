@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
+import MonteCarloAI from "./ai/monteCarloAI.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -160,8 +161,8 @@ io.on("connection", socket => {
         strategy = new SimpleAIStrategy();
         break;
 
-      case "aggressive":
-        strategy = new SimpleAIStrategy(); // placeholder
+      case "monte":
+        strategy = new MonteCarloAI(); // placeholder
         break;
 
       case "defensive":

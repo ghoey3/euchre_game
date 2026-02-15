@@ -1,12 +1,14 @@
 import BaseAI from "./baseAI.js";
 import SimpleAI from "./simpleAI.js";
+import SoftmaxHeuristicAI from "./softmaxHeuristicAI.js";
 
 import OrderUpSimulator from "./simulation/orderUpSimulator.js";
-import PlaySimulator from "./simulation/playCardSimulator.js";
 import PlayDecisionSim from "./simulation/playDecisionSimulator.js";
 
 import { createDeck, shuffle } from "../engine/deck.js";
 import { getEffectiveSuit } from "../engine/cardUtils.js";
+
+import { audit } from "./auditStats.js";
 
 const DEBUG = false;
 
@@ -15,15 +17,31 @@ export default class MonteCarloAI extends BaseAI {
   constructor(options = {}) {
     super("MonteCarloAI");
 
+    this.callThreshold = options.callThreshold ?? 0.4;
     this.simPlay = options.simulationsPerMove ?? 200;
     this.simOrder = options.simulationsPerOrderUp ?? 600;
 
     this.fallbackAI = new SimpleAI();
+    this.orderCounter = 0;
 
     this.playDecision = new PlayDecisionSim({
       simulations: this.simPlay,
-      playoutAI: this.fallbackAI
+      aiFactory: () => this.createRolloutAI()
     });
+  }
+
+  randomTemperature() {
+    return 0.25 + Math.random() * 0.2;
+  }
+
+  createRolloutAI() {
+    return new SoftmaxHeuristicAI({
+      temperature: this.randomTemperature()
+    });
+  }
+
+  createAIFactory() {
+    return () => this.createRolloutAI();
   }
 
   /* ================= ORDER UP ================= */
@@ -43,7 +61,7 @@ export default class MonteCarloAI extends BaseAI {
 
       const sim = new OrderUpSimulator({
         rootContext: simCtx,
-        playoutAI: this.fallbackAI,
+        aiFactory: this.createAIFactory(),
         fixedHands,
         simulatePickup: true
       });
@@ -53,14 +71,35 @@ export default class MonteCarloAI extends BaseAI {
 
     const avg = callScore / this.simOrder;
 
-    if (DEBUG) {
-      console.log("ORDER avg EV:", avg.toFixed(3));
-    }
+    audit.calls++;
+    if (avg > 0) audit.positiveCalls++;
 
-    return {
-      call: avg > .4,
+    const decision = {
+      call: avg > this.callThreshold,
       alone: avg > 2.5
     };
+
+    if (DEBUG) {
+
+      this.orderCounter++;
+
+      console.log("====================================");
+      console.log(`ORDER #${this.orderCounter}`);
+      console.log("Seat:", context.myIndex);
+      console.log("Dealer:", context.dealerIndex);
+      console.log("Upcard:", context.upcard.rank + context.upcard.suit);
+
+      console.log(
+        "Hand:",
+        context.hand.map(c => c.rank + c.suit).join(" ")
+      );
+
+      console.log("Avg EV:", avg.toFixed(3));
+      console.log("Decision:", decision);
+      console.log("====================================");
+    }
+
+    return decision;
   }
 
   /* ================= PLAY CARD ================= */
@@ -69,7 +108,13 @@ export default class MonteCarloAI extends BaseAI {
 
     const card = this.playDecision.chooseCard(context);
 
-    //console.log("PLAY decision:", card);
+    audit.plays = (audit.plays || 0) + 1;
+
+    const isTrump =
+      getEffectiveSuit(card, context.trump) === context.trump;
+
+    if (isTrump)
+      audit.trumpPlayed = (audit.trumpPlayed || 0) + 1;
 
     return card;
   }
@@ -127,21 +172,17 @@ export default class MonteCarloAI extends BaseAI {
     const trump = context.trump;
     const voidInfo = context.voidInfo || {0:{},1:{},2:{},3:{}};
 
-    // deal one card at a time to respect constraints
     for (let p = 0; p < 4; p++) {
 
       if (p === context.myIndex) continue;
 
       while (hands[p].length < target && remaining.length > 0) {
 
-        // try to find valid card
         let idx = remaining.findIndex(card => {
-
           const eff = getEffectiveSuit(card, trump);
           return !voidInfo[p]?.[eff];
         });
 
-        // fallback if no valid card (constraints impossible)
         if (idx === -1) idx = 0;
 
         const card = remaining.splice(idx, 1)[0];

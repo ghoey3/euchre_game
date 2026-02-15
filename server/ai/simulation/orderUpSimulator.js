@@ -7,8 +7,8 @@ export default class OrderUpSimulator {
 
   constructor({
     rootContext,
-    forcedCard = null,
     playoutAI,
+    aiFactory,
     fixedHands,
     simulatePickup = false
   }) {
@@ -18,11 +18,27 @@ export default class OrderUpSimulator {
     }
 
     this.ctx = JSON.parse(JSON.stringify(rootContext));
-    this.ai = playoutAI;
     this.hands = JSON.parse(JSON.stringify(fixedHands));
 
-    this.forcedCard = forcedCard;
-    this.forcedUsed = false;
+    // Build per-player AI table
+    if (aiFactory) {
+      this.ais = {
+        0: aiFactory(0),
+        1: aiFactory(1),
+        2: aiFactory(2),
+        3: aiFactory(3)
+      };
+    } else if (playoutAI) {
+      this.ais = {
+        0: playoutAI,
+        1: playoutAI,
+        2: playoutAI,
+        3: playoutAI
+      };
+    } else {
+      throw new Error("Need playoutAI or aiFactory");
+    }
+
     this.simulatePickup = simulatePickup;
 
     this.trump = this.ctx.trump;
@@ -41,45 +57,56 @@ export default class OrderUpSimulator {
 
   run() {
 
-    if (this.simulatePickup && this.ctx.upcard && this.trump === this.ctx.upcard.suit) {
+    if (
+      this.simulatePickup &&
+      this.ctx.upcard &&
+      this.trump === this.ctx.upcard.suit
+    ) {
       this.applyPickup();
     }
 
     return this.playOut();
   }
 
+  /* ================= PICKUP ================= */
+
   applyPickup() {
 
     const dealer = this.ctx.dealerIndex;
+    const ai = this.ais[dealer];
 
     this.hands[dealer].push(this.ctx.upcard);
 
-    const discard = this.ai.getAction({
+    const discard = ai.getAction({
       phase: "discard",
       hand: this.hands[dealer],
       trump: this.trump,
       dealerIndex: dealer
     });
 
+    if (!discard || !discard.card) {
+      throw new Error("Discard failed during pickup");
+    }
+
     this.removeCard(this.hands[dealer], discard.card);
+
+    if (this.hands[dealer].length !== 5) {
+      throw new Error("Pickup hand size wrong");
+    }
   }
+
+  /* ================= PLAYOUT ================= */
 
   playOut() {
 
-    const team0 = this.ctx.tricksSoFar?.team0 ?? 0;
-    const team1 = this.ctx.tricksSoFar?.team1 ?? 0;
+    let tricks = [
+      this.ctx.tricksSoFar?.team0 ?? 0,
+      this.ctx.tricksSoFar?.team1 ?? 0
+    ];
 
-    let tricks = [team0, team1];
     let leader = this.ctx.trickLeader;
 
     let trickCards = [...(this.ctx.trickCards || [])];
-
-    if (DEBUG) {
-      console.log("\n=== START PLAYOUT ===");
-      console.log("Leader:", leader);
-      console.log("Initial trick:", trickCards);
-      console.log("Tricks so far:", tricks);
-    }
 
     if (trickCards.length > 0) {
       leader = this.finishTrick(trickCards, leader, tricks);
@@ -93,59 +120,27 @@ export default class OrderUpSimulator {
       for (let offset = 0; offset < 4; offset++) {
 
         const player = (leader + offset) % 4;
+        const ai = this.ais[player];
 
-        if (DEBUG) {
-          console.log("\n------ TURN DEBUG ------");
-          console.log("Leader:", leader);
-          console.log("Offset:", offset);
-          console.log("Player:", player);
-          console.log("Trick size:", trickCards.length);
-          console.log("Trick cards:", trickCards);
-          console.log("Lead suit:", leadSuit);
-          console.log("Player hand:", this.hands[player]);
-        }
+        const action = ai.getAction({
+          phase: "play_card",
+          hand: this.hands[player],
+          trump: this.trump,
+          trickCards,
+          leadSuit,
+          trickLeader: leader,
+          myIndex: player,
+          makerTeam: this.ctx.makerTeam,
+          alonePlayerIndex: this.ctx.alonePlayerIndex,
+          voidInfo: this.ctx.voidInfo || {0:{},1:{},2:{},3:{}},
+          playedCards: this.playedCards
+        });
 
-        let card;
-
-        const alreadyPlayed = trickCards.some(t => t.player === this.myIndex);
-
-        if (
-          player === this.myIndex &&
-          this.forcedCard &&
-          !this.forcedUsed &&
-          !alreadyPlayed
-        ) {
-          card = this.forcedCard;
-          this.forcedUsed = true;
-
-          if (DEBUG) console.log("FORCED MOVE:", card);
-        } else {
-
-          const action = this.ai.getAction({
-            phase: "play_card",
-            hand: this.hands[player],
-            trump: this.trump,
-            trickCards,
-            leadSuit,
-            trickLeader: leader,
-            myIndex: player,
-            makerTeam: this.ctx.makerTeam,
-            alonePlayerIndex: this.ctx.alonePlayerIndex,
-            voidInfo: this.ctx.voidInfo || {0:{},1:{},2:{},3:{}},
-            played_cards: this.playedCards
-          });
-
-          card = action?.card;
-        }
-
-        if (!card) {
-          console.error("=== ROLLOUT FAILURE ===");
-          console.error("Player:", player);
-          console.error("Hand:", this.hands[player]);
-          console.error("Trick:", trickCards);
-          console.error("Lead suit:", leadSuit);
+        if (!action || !action.card) {
           throw new Error("Rollout returned no card");
         }
+
+        let card = action.card;
 
         if (!leadSuit) {
           leadSuit = getEffectiveSuit(card, this.trump);
@@ -167,15 +162,16 @@ export default class OrderUpSimulator {
 
       leader = trickCards[winnerOffset].player;
       tricks[leader % 2]++;
-
-      if (DEBUG) {
-        console.log("Trick winner:", leader);
-        console.log("Score:", tricks);
-      }
     }
 
-    return tricks[0] - tricks[1];
+    return this.scoreRound(
+      tricks,
+      this.ctx.makerTeam,
+      this.ctx.alonePlayerIndex ?? null
+    );
   }
+
+  /* ================= FINISH TRICK ================= */
 
   finishTrick(trickCards, leader, tricks) {
 
@@ -184,47 +180,24 @@ export default class OrderUpSimulator {
     for (let i = trickCards.length; i < 4; i++) {
 
       const player = (leader + i) % 4;
+      const ai = this.ais[player];
 
-      if (DEBUG) {
-        console.log("FINISH TRICK TURN:", player);
-        console.log("Existing trick:", trickCards);
-      }
+      const action = ai.getAction({
+        phase: "play_card",
+        hand: this.hands[player],
+        trump: this.trump,
+        trickCards,
+        leadSuit,
+        trickLeader: leader,
+        myIndex: player,
+        playedCards: this.playedCards
+      });
 
-      let card;
-
-      const alreadyPlayed = trickCards.some(t => t.player === this.myIndex);
-
-      if (
-        player === this.myIndex &&
-        this.forcedCard &&
-        !this.forcedUsed &&
-        !alreadyPlayed
-      ) {
-        card = this.forcedCard;
-        this.forcedUsed = true;
-
-        if (DEBUG) console.log("FORCED MID-TRICK:", card);
-      } else {
-
-        const action = this.ai.getAction({
-          phase: "play_card",
-          hand: this.hands[player],
-          trump: this.trump,
-          trickCards,
-          leadSuit,
-          trickLeader: leader,
-          myIndex: player,
-          played_cards: this.playedCards
-        });
-
-        card = action?.card;
-      }
-
-      if (!card) {
+      if (!action || !action.card) {
         throw new Error("finishTrick — no card");
       }
 
-      card = this.enforceLegalPlay(player, card, leadSuit);
+      let card = this.enforceLegalPlay(player, action.card, leadSuit);
 
       this.removeCard(this.hands[player], card);
       this.playedCards.push(card);
@@ -244,6 +217,8 @@ export default class OrderUpSimulator {
     return winner;
   }
 
+  /* ================= HELPERS ================= */
+
   enforceLegalPlay(player, card, leadSuit) {
 
     const hand = this.hands[player];
@@ -252,18 +227,31 @@ export default class OrderUpSimulator {
       getEffectiveSuit(c, this.trump) === leadSuit
     );
 
-    if (follow.length === 0) return card;
+    if (!follow.length) return card;
 
     const legal = follow.some(c =>
       c.rank === card.rank && c.suit === card.suit
     );
 
-    if (!legal) {
-      console.warn("Simulator corrected illegal play");
-      return follow[0];
-    }
+    return legal ? card : follow[0];
+  }
 
-    return card;
+  scoreRound(tricks, makerTeam, alonePlayerIndex) {
+
+    const makers = tricks[makerTeam];
+
+    if (makers >= 3) {
+
+      if (alonePlayerIndex !== null && makers === 5) return 4;
+      if (makers === 5) return 2;
+
+      return 1;
+
+    } else {
+
+      return -2;
+
+    }
   }
 
   removeCard(hand, card) {
@@ -273,12 +261,6 @@ export default class OrderUpSimulator {
     );
 
     if (idx === -1) {
-
-      console.error("=== SIM ERROR ===");
-      console.error("Trying to remove:", card);
-      console.error("Hand was:", hand);
-      console.error("Context:", this.ctx);
-
       throw new Error("Card removal failed — inconsistent sim");
     }
 

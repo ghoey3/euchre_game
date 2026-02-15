@@ -2,11 +2,22 @@ import PlayRolloutSim from "./playRolloutSimulator.js";
 import { createDeck, shuffle } from "../../engine/deck.js";
 import { getEffectiveSuit } from "../../engine/cardUtils.js";
 
+
+const DEBUG_PLAY = false;
+
+function cardStr(c) {
+  return `${c.rank}${c.suit}`;
+}
 export default class PlayDecisionSim {
 
-  constructor({ simulations = 200, playoutAI }) {
+  constructor({
+    simulations = 200,
+    playoutAI = null,
+    aiFactory = null
+  }) {
     this.simulations = simulations;
     this.playoutAI = playoutAI;
+    this.aiFactory = aiFactory;
   }
 
   chooseCard(context) {
@@ -30,7 +41,6 @@ export default class PlayDecisionSim {
 
         const hands = JSON.parse(JSON.stringify(world));
 
-        // remove move from my hand
         hands[context.myIndex] =
           context.hand.filter(c =>
             !(c.rank === move.rank && c.suit === move.suit)
@@ -50,16 +60,56 @@ export default class PlayDecisionSim {
 
         const rollout = new PlayRolloutSim({
           context: nextContext,
-          playoutAI: this.playoutAI,
-          fixedHands: hands
+          fixedHands: hands,
+          aiFactory: this.aiFactory,
+          playoutAI: this.playoutAI
         });
 
         totals.set(move, totals.get(move) + rollout.run());
       }
     }
 
-    return [...totals.entries()]
-      .sort((a,b)=>b[1]-a[1])[0][0];
+    const sorted = [...totals.entries()]
+      .sort((a,b)=>b[1]-a[1]);
+
+    const chosen = sorted[0][0];
+  
+
+    if (DEBUG_PLAY) {
+
+      console.log("\n================ PLAY DECISION ================");
+
+      console.log("Seat:", context.myIndex);
+      console.log("Trump:", context.trump);
+      console.log("Lead suit:", context.leadSuit ?? "(leading)");
+
+      console.log("\nTrick so far:");
+
+      (context.trickCards || []).forEach(t => {
+        console.log(`Player ${t.player} -> ${cardStr(t.card)}`);
+      });
+
+      console.log(
+        "\nHand:",
+        context.hand.map(cardStr).join(" ")
+      );
+
+      console.log(
+        "Legal:",
+        legal.map(cardStr).join(" ")
+      );
+
+      console.log("\nRollout totals:");
+
+      for (const [card, score] of sorted) {
+        console.log(`${cardStr(card)} -> ${score.toFixed(3)}`);
+      }
+
+      console.log("\nChosen:", cardStr(chosen));
+      console.log("================================================\n");
+    }
+
+    return chosen;
   }
 
   getLegalCards(hand, leadSuit, trump) {

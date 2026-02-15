@@ -278,7 +278,10 @@ function renderLobby() {
 
 document.getElementById("add-ai-btn").onclick = () => {
   console.log("ADD AI CLICKED");
-  socket.emit("add_ai", { aiType: "simple" });
+
+  const aiType = document.getElementById("ai-type").value;
+
+  socket.emit("add_ai", { aiType });
 };
 
 document.getElementById("start-game-btn").onclick = () => {

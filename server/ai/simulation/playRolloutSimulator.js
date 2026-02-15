@@ -1,15 +1,33 @@
 import { determineTrickWinner } from "../../engine/trickLogic.js";
 import { getEffectiveSuit } from "../../engine/cardUtils.js";
 
-const DEBUG = true;
+const DEBUG = false;
 
 export default class PlayRolloutSim {
 
-  constructor({ context, fixedHands, playoutAI }) {
+  constructor({ context, fixedHands, playoutAI, aiFactory }) {
 
     this.ctx = JSON.parse(JSON.stringify(context));
     this.hands = JSON.parse(JSON.stringify(fixedHands));
-    this.ai = playoutAI;
+
+    // Build per-player AI table
+    if (aiFactory) {
+      this.ais = {
+        0: aiFactory(0),
+        1: aiFactory(1),
+        2: aiFactory(2),
+        3: aiFactory(3)
+      };
+    } else if (playoutAI) {
+      this.ais = {
+        0: playoutAI,
+        1: playoutAI,
+        2: playoutAI,
+        3: playoutAI
+      };
+    } else {
+      throw new Error("Need playoutAI or aiFactory");
+    }
 
     this.trump = this.ctx.trump;
     this.myIndex = this.ctx.myIndex;
@@ -20,15 +38,12 @@ export default class PlayRolloutSim {
 
     this.playedCards = [...(this.ctx.playedCards || [])];
 
-    // Remove cards already played in current trick
+    // Remove already played cards
     for (const t of (this.ctx.trickCards || [])) {
-
       const hand = this.hands[t.player];
-
       const idx = hand.findIndex(c =>
         c.rank === t.card.rank && c.suit === t.card.suit
       );
-
       if (idx !== -1) hand.splice(idx, 1);
     }
   }
@@ -52,7 +67,6 @@ export default class PlayRolloutSim {
 
     while (tricks[0] + tricks[1] < 5) {
 
-      // Stop if no cards left
       if (this.totalCardsLeft() === 0) break;
 
       trickCards = [];
@@ -62,10 +76,11 @@ export default class PlayRolloutSim {
 
         const player = (this.leader + offset) % 4;
         const hand = this.hands[player];
+        const ai = this.ais[player];
 
         if (!hand.length) break;
 
-        const action = this.ai.getAction({
+        const action = ai.getAction({
           phase: "play_card",
           hand,
           trump: this.trump,
@@ -77,10 +92,7 @@ export default class PlayRolloutSim {
         });
 
         if (!action || !action.card) {
-          console.error("AI returned no card");
-          console.error("Hand:", hand);
-          console.error("Trick:", trickCards);
-          throw new Error("Null play");
+          throw new Error("Rollout returned no card");
         }
 
         let card = action.card;
@@ -120,10 +132,11 @@ export default class PlayRolloutSim {
 
       const player = (this.leader + i) % 4;
       const hand = this.hands[player];
+      const ai = this.ais[player];
 
       if (!hand.length) break;
 
-      const action = this.ai.getAction({
+      const action = ai.getAction({
         phase: "play_card",
         hand,
         trump: this.trump,
@@ -135,9 +148,7 @@ export default class PlayRolloutSim {
       });
 
       if (!action || !action.card) {
-        console.error("AI returned no card (finishTrick)");
-        console.error("Hand:", hand);
-        throw new Error("Null play");
+        throw new Error("finishTrick returned no card");
       }
 
       let card = this.enforceLegal(player, action.card, leadSuit);
@@ -187,12 +198,6 @@ export default class PlayRolloutSim {
 
     if (idx === -1) {
       console.error("=== DRIFT DETECTED ===");
-      console.error("Card:", card);
-      console.error("Player hand:", hand);
-      console.error("Full hands:", this.hands);
-      console.error("Current trick:", trickCards);
-      console.error("Played:", this.playedCards);
-      console.error("======================");
       throw new Error("Rollout removal failed — state drift");
     }
 

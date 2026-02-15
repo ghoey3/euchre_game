@@ -9,366 +9,182 @@ import {
 
 const SUITS = ["hearts","diamonds","clubs","spades"];
 
-function getLowestCard(cards, trump) {
-  return cards.reduce((lowest, card) => {
-    if (!lowest) return card;
-
-    const eff = getEffectiveSuit(card, trump);
-    const lowEff = getEffectiveSuit(lowest, trump);
-
-    const p1 = getCardPower(card, eff, trump);
-    const p2 = getCardPower(lowest, lowEff, trump);
-
-    return p1 < p2 ? card : lowest;
-  }, null);
+function countSuit(hand, suit, trump) {
+  return hand.filter(c => getEffectiveSuit(c,trump)===suit).length;
 }
 
-function getHighestCard(cards, trump) {
-  return cards.reduce((highest, card) => {
-    if (!highest) return card;
+function isAce(card) {
+  return card.rank === "A";
+}
 
-    const eff = getEffectiveSuit(card, trump);
-    const highEff = getEffectiveSuit(highest, trump);
+function getLowest(cards, trump) {
+  return cards.reduce((a,b)=>{
+    if(!a) return b;
+    return getCardPower(b,getEffectiveSuit(b,trump),trump)
+      < getCardPower(a,getEffectiveSuit(a,trump),trump) ? b : a;
+  },null);
+}
 
-    const p1 = getCardPower(card, eff, trump);
-    const p2 = getCardPower(highest, highEff, trump);
-
-    return p1 > p2 ? card : highest;
-  }, null);
+function getHighest(cards, trump) {
+  return cards.reduce((a,b)=>{
+    if(!a) return b;
+    return getCardPower(b,getEffectiveSuit(b,trump),trump)
+      > getCardPower(a,getEffectiveSuit(a,trump),trump) ? b : a;
+  },null);
 }
 
 export default class SimpleAI extends BaseAI {
 
-  /* ============================= */
-  /* ========= EVALUATION ======== */
-  /* ============================= */
-
-  getStrategicValue(card, trump) {
-    if (isRightBower(card, trump)) return 30;
-    if (isLeftBower(card, trump)) return 26;
-
-    const rank = rankValue(card.rank);
-
-    if (getEffectiveSuit(card, trump) === trump) {
-      return 18 + rank;
-    }
-
-    if (card.rank === "A") return 12;
-    if (card.rank === "K") return 7;
-    if (card.rank === "Q") return 5;
-
-    return 2;
-  }
-
   evaluateHand(hand, trump) {
+
     let score = 0;
     let trumpCount = 0;
 
-    for (let card of hand) {
-      score += this.getStrategicValue(card, trump);
-      if (getEffectiveSuit(card, trump) === trump) {
-        trumpCount++;
-      }
+    for (const c of hand) {
+
+      if (isRightBower(c,trump)) score += 35;
+      else if (isLeftBower(c,trump)) score += 30;
+      else if (getEffectiveSuit(c,trump)===trump) score += 18 + rankValue(c.rank);
+      else if (c.rank==="A") score += 14;
+      else if (c.rank==="K") score += 7;
+      else score += 2;
+
+      if (getEffectiveSuit(c,trump)===trump) trumpCount++;
     }
 
-    // Trump synergy bonus
-    score += trumpCount * 4;
+    score += trumpCount * 5;
 
-    // Void bonus
-    for (let suit of SUITS) {
-      if (suit === trump) continue;
-
-      const count = hand.filter(
-        c => getEffectiveSuit(c, trump) === suit
-      ).length;
-
-      if (count === 0) score += 5;
+    // void bonus
+    for (const s of SUITS) {
+      if (s===trump) continue;
+      if (countSuit(hand,s,trump)===0) score += 6;
     }
 
     return score;
   }
 
-  /* ============================= */
-  /* ========= BIDDING =========== */
-  /* ============================= */
-
   orderUp(context) {
+
     const trump = context.upcard.suit;
-    const score = this.evaluateHand(context.hand, trump);
+    let score = this.evaluateHand(context.hand,trump);
 
-    const myIndex = context.myIndex;
-    const dealerIndex = context.dealerIndex;
-    const myTeam = myIndex % 2;
-    const dealerTeam = dealerIndex % 2;
+    const trumps = context.hand.filter(c=>getEffectiveSuit(c,trump)===trump);
 
-    const isDealer = myIndex === dealerIndex;
-    const partnerIsDealer = myTeam === dealerTeam && !isDealer;
-    const opponentIsDealer = myTeam !== dealerTeam;
+    if (trumps.length>=3) score += 12;
+    if (trumps.some(c=>isRightBower(c,trump))) score += 10;
 
-    /* =============================
-      Upcard Strength Adjustment
-    ============================= */
+    return {
+      call: score>=95,
+      alone: score>=125
+    };
+  }
 
-    const upcard = context.upcard;
-    let upcardBonus = 0;
+  callTrump(context) {
 
-    if (upcard.rank === "J") {
-      // Right bower is huge
-      upcardBonus = 15;
-    } else if (upcard.rank === "A") {
-      upcardBonus = 10;
-    } else if (upcard.rank === "K") {
-      upcardBonus = 6;
-    } else if (upcard.rank === "Q") {
-      upcardBonus = 4;
-    } else {
-      upcardBonus = 0; // 9 / 10 weak
-    }
+    let bestSuit=null;
+    let bestScore=-Infinity;
 
-    let adjustedScore = score + upcardBonus;
-
-    /* =============================
-      Dealer / Team Adjustments
-    ============================= */
-
-    // Partner picking up → we gain full value
-    if (partnerIsDealer) {
-      adjustedScore += 8;
-    }
-
-    // We are dealer → moderate bonus
-    if (isDealer) {
-      adjustedScore += 5;
-    }
-
-    // Opponent dealer → more cautious
-    if (opponentIsDealer) {
-      adjustedScore -= 8;
-    }
-
-    /* =============================
-      Decision Thresholds
-    ============================= */
-
-    // Strong call
-    if (adjustedScore >= 105) {
-      return {
-        call: true,
-        alone: adjustedScore >= 125
-      };
-    }
-
-    // Medium call
-    if (adjustedScore >= 90) {
-      return {
-        call: true,
-        alone: false
-      };
+    for(const s of SUITS) {
+      if(s===context.upcard.suit) continue;
+      const sc=this.evaluateHand(context.hand,s);
+      if(sc>bestScore){bestScore=sc;bestSuit=s;}
     }
 
     return {
-      call: false,
-      alone: false
+      call: bestScore>=95,
+      suit: bestSuit,
+      alone: bestScore>=125
     };
   }
-  
-  callTrump(context) {
-    let bestSuit = null;
-    let bestScore = -Infinity;
-
-    for (let suit of SUITS) {
-      if (suit === context.upcard.suit) continue;
-
-      const score = this.evaluateHand(context.hand, suit);
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestSuit = suit;
-      }
-    }
-
-    if (bestScore >= 100) {
-      return { call: true, suit: bestSuit, alone: bestScore >= 120 };
-    }
-
-    if (bestScore <= 75) {
-      return { call: false, suit: null, alone: false };
-    }
-
-    return { call: true, suit: bestSuit, alone: false };
-    }
 
   callTrumpForced(context) {
-    let bestSuit = null;
-    let bestScore = -Infinity;
 
-    for (let suit of SUITS) {
-      if (suit === context.upcard.suit) continue;
-
-      const score = this.evaluateHand(context.hand, suit);
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestSuit = suit;
-      }
-    }
-
-    return {
-      call: true,
-      suit: bestSuit,
-      alone: bestScore >= 120
-    };
+    return this.callTrump(context);
   }
-
-  /* ============================= */
-  /* ========= DISCARD =========== */
-  /* ============================= */
 
   getDiscard(context) {
-    const hand = context.hand;
-    const trump = context.trump;
 
-    const nonTrump = hand.filter(
-      c => getEffectiveSuit(c, trump) !== trump
-    );
+    const {hand,trump}=context;
 
-    if (nonTrump.length > 0) {
-      return {
-        type: "discard",
-        card: getLowestCard(nonTrump, trump)
-      };
+    const nonTrump=hand.filter(c=>getEffectiveSuit(c,trump)!==trump);
+
+    // prefer discarding singleton garbage
+    for(const c of nonTrump) {
+      const s=getEffectiveSuit(c,trump);
+      if(countSuit(hand,s,trump)===1 && c.rank!=="A") {
+        return {type:"discard",card:c};
+      }
     }
 
-    return {
-      type: "discard",
-      card: getLowestCard(hand, trump)
-    };
-  }
+    if(nonTrump.length) {
+      return {type:"discard",card:getLowest(nonTrump,trump)};
+    }
 
-  /* ============================= */
-  /* ========= CARD PLAY ========= */
-  /* ============================= */
+    return {type:"discard",card:getLowest(hand,trump)};
+  }
 
   playCard(context) {
-    const {
-      hand,
-      leadSuit,
-      trump,
-      trickCards,
-      myIndex,
-      alonePlayerIndex
-    } = context;
 
-    const partnerIndex = (myIndex + 2) % 4;
-    const IAmAlone = alonePlayerIndex === myIndex;
+    const {hand,leadSuit,trump,trickCards,myIndex,makerTeam}=context;
 
-    let legalCards = hand;
+    const legal = leadSuit
+      ? hand.filter(c=>getEffectiveSuit(c,trump)===leadSuit)
+      : hand;
 
-    if (leadSuit) {
-      const follow = hand.filter(
-        c => getEffectiveSuit(c, trump) === leadSuit
-      );
-      if (follow.length > 0) legalCards = follow;
-    }
+    const cards = legal.length?legal:hand;
 
-    /* -------- LEADING -------- */
+    const isMaker = (myIndex%2)===makerTeam;
 
-    if (!leadSuit) {
+    if(!leadSuit) {
 
-      const trumpCards = hand.filter(
-        c => getEffectiveSuit(c, trump) === trump
-      );
-
-      const nonTrump = hand.filter(
-        c => getEffectiveSuit(c, trump) !== trump
-      );
-
-      if (IAmAlone && trumpCards.length > 0) {
-        return getHighestCard(trumpCards, trump);
-      }
-
-      if (trumpCards.length >= 3) {
-        return getHighestCard(trumpCards, trump);
-      }
-
-      if (nonTrump.length > 0) {
-        const suitCounts = {};
-        for (let card of nonTrump) {
-          const s = getEffectiveSuit(card, trump);
-          suitCounts[s] = (suitCounts[s] || 0) + 1;
+      // lead ace if short
+      for(const c of hand) {
+        if(isAce(c) && countSuit(hand,getEffectiveSuit(c,trump),trump)===1) {
+          return c;
         }
-
-        const bestSuit = Object.keys(suitCounts)
-          .sort((a,b) => suitCounts[b] - suitCounts[a])[0];
-
-        const suitCards = nonTrump.filter(
-          c => getEffectiveSuit(c, trump) === bestSuit
-        );
-
-        return getHighestCard(suitCards, trump);
       }
 
-      return getLowestCard(hand, trump);
+      // draw trump if maker and long
+      const trumps=hand.filter(c=>getEffectiveSuit(c,trump)===trump);
+      if(isMaker && trumps.length>=3) return getHighest(trumps,trump);
+
+      return getHighest(cards,trump);
     }
 
-    /* -------- FOLLOWING -------- */
-
-    let highestPower = -1;
-    let winningOffset = 0;
-
-    trickCards.forEach((t, i) => {
-      const p = getCardPower(t.card, leadSuit, trump);
-      if (p > highestPower) {
-        highestPower = p;
-        winningOffset = i;
-      }
+    // following
+    let bestOnTable=-1;
+    trickCards.forEach(t=>{
+      bestOnTable=Math.max(bestOnTable,getCardPower(t.card,leadSuit,trump));
     });
 
-    const trickLeader = context.trickLeader;
-    const winningPlayer =
-      (trickLeader + winningOffset) % 4;
+    const winners=cards.filter(c=>getCardPower(c,leadSuit,trump)>bestOnTable);
 
-    const partnerWinning = winningPlayer === partnerIndex;
+    if(winners.length) return getLowest(winners,trump);
 
-    // If partner winning → dump lowest
-    if (!IAmAlone && partnerWinning) {
-      return getLowestCard(legalCards, trump);
-    }
-
-    const winningOptions = legalCards.filter(card =>
-      getCardPower(card, leadSuit, trump) > highestPower
-    );
-
-    if (winningOptions.length > 0) {
-      return getLowestCard(winningOptions, trump);
-    }
-
-    return getLowestCard(legalCards, trump);
+    return getLowest(cards,trump);
   }
 
-  /* ============================= */
-  /* ========= ACTION ROUTER ===== */
-  /* ============================= */
-
   getAction(context) {
-    switch (context.phase) {
+
+    switch(context.phase) {
+
       case "play_card":
-        return { type: "play_card", card: this.playCard(context) };
+        return {type:"play_card",card:this.playCard(context)};
 
       case "order_up":
-        return { type: "order_up", ...this.orderUp(context) };
+        return {type:"order_up",...this.orderUp(context)};
 
       case "call_trump":
-        return { type: "call_trump", ...this.callTrump(context) };
+        return {type:"call_trump",...this.callTrump(context)};
 
       case "call_trump_forced":
-        return { type: "call_trump_forced", ...this.callTrumpForced(context) };
+        return {type:"call_trump_forced",...this.callTrumpForced(context)};
 
       case "discard":
         return this.getDiscard(context);
 
       default:
-        throw new Error("Unknown phase: " + context.phase);
+        throw new Error("Unknown phase: "+context.phase);
     }
   }
 }
