@@ -1,6 +1,6 @@
 import { determineTrickWinner } from "../../engine/trickLogic.js";
 import { getEffectiveSuit } from "../../engine/cardUtils.js";
-
+import { profiler } from "../profiler.js"
 const DEBUG = false;
 
 export default class PlayRolloutSim {
@@ -53,6 +53,8 @@ export default class PlayRolloutSim {
   }
 
   run() {
+    const start = profiler.start("rollout");
+
 
     let tricks = [
       this.ctx.tricksSoFar?.team0 ?? 0,
@@ -121,6 +123,7 @@ export default class PlayRolloutSim {
       tricks[this.leader % 2]++;
     }
 
+    profiler.end("rollout", start);
     return tricks[0] - tricks[1];
   }
 

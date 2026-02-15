@@ -9,6 +9,7 @@ import { createDeck, shuffle } from "../engine/deck.js";
 import { getEffectiveSuit } from "../engine/cardUtils.js";
 
 import { audit } from "./auditStats.js";
+import { profiler } from "./profiler.js";
 
 const DEBUG = false;
 
@@ -47,13 +48,17 @@ export default class MonteCarloAI extends BaseAI {
   /* ================= ORDER UP ================= */
 
   orderUp(context) {
-
+    const start = profiler.start("orderUp");
     let callScore = 0;
 
     for (let i = 0; i < this.simOrder; i++) {
 
-      const simCtx = JSON.parse(JSON.stringify(context));
-
+      const simCtx = {
+        ...context,
+        hand: [...context.hand],
+        trickCards: [...(context.trickCards || [])],
+        playedCards: [...(context.playedCards || [])]
+      };
       simCtx.trump = context.upcard.suit;
       simCtx.makerTeam = context.myIndex % 2;
 
@@ -67,6 +72,11 @@ export default class MonteCarloAI extends BaseAI {
       });
 
       callScore += sim.run();
+      if (i > 150) {
+        const avg = callScore / (i + 1);
+
+        if (Math.abs(avg) > 1.5) break;
+      }
     }
 
     const avg = callScore / this.simOrder;
@@ -98,14 +108,14 @@ export default class MonteCarloAI extends BaseAI {
       console.log("Decision:", decision);
       console.log("====================================");
     }
-
+    profiler.end("orderUp", start);
     return decision;
   }
 
   /* ================= PLAY CARD ================= */
 
   playCard(context) {
-
+    const start = profiler.start("playDecision");
     const card = this.playDecision.chooseCard(context);
 
     audit.plays = (audit.plays || 0) + 1;
@@ -115,7 +125,7 @@ export default class MonteCarloAI extends BaseAI {
 
     if (isTrump)
       audit.trumpPlayed = (audit.trumpPlayed || 0) + 1;
-
+    profiler.end("playDecision", start);
     return card;
   }
 

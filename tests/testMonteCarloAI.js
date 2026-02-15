@@ -3,6 +3,8 @@ import MonteCarloAI from "../server/ai/monteCarloAI.js";
 import SimpleAI from "../server/ai/simpleAI.js";
 import { audit } from "../server/ai/auditStats.js";
 
+import { profiler } from "../server/ai/profiler.js";
+
 
 const NUM_GAMES = 1000;
 
@@ -120,4 +122,7 @@ for (const threshold of THRESHOLDS) {
 
   console.log("Trump play rate:", trumpRate);
 
+
+  
+  profiler.report();
 }
