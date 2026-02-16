@@ -19,9 +19,24 @@ export function sampleWorld(context) {
     ...(context.trickCards || []).map(t => t.card)
   ];
 
+  // Upcard is never part of the random unknown pool:
+  // - round 1: it sits on top until dealer picks up
+  // - round 2: it is dead in the kitty
+  // - play phase after pickup: dealer holds/played it explicitly
+  if (
+    context.upcard &&
+    !known.some(card => sameCard(card, context.upcard))
+  ) {
+    known.push(context.upcard);
+  }
+
   let remaining = deck.filter(card =>
     !known.some(k => sameCard(k, card))
   );
+
+  if (known.length + remaining.length !== 24) {
+    throw new Error("Sampler conservation failure");
+  }
 
   shuffle(remaining);
 
