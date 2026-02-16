@@ -7,6 +7,15 @@ function sameCard(a, b) {
 }
 
 export function sampleWorld(context) {
+
+  const myKeys = context.hand.map(c => c.rank + c.suit);
+  const mySet = new Set(myKeys);
+
+  if (mySet.size !== myKeys.length) {
+    console.error("DUPLICATE IN ROOT CONTEXT HAND");
+    console.error(myKeys);
+    throw new Error("Root context hand duplicate");
+  }
   const voidInfo = context.voidInfo || {0:{},1:{},2:{},3:{}};
 
   const deck = createDeck();
@@ -19,11 +28,7 @@ export function sampleWorld(context) {
     ...(context.trickCards || []).map(t => t.card)
   ];
 
-  let remaining = deck.filter(card =>
-    !known.some(k => sameCard(k, card))
-  );
-
-  shuffle(remaining);
+  
 
   hands[context.myIndex] = [...context.hand];
 
@@ -41,25 +46,35 @@ export function sampleWorld(context) {
     throw new Error("cardsRemaining mismatch for my seat");
   }
 
-  if (
-    context.dealerPickedUp &&
-    context.upcard &&
-    context.dealerIndex !== context.myIndex
-  ) {
-    const dealer = context.dealerIndex;
+  if (context.dealerPickedUp && context.upcard) {
 
-    const alreadyInHand = hands[dealer].some(c =>
-      sameCard(c, context.upcard)
-    );
+    // Always remove from deck pool
+    known.push(context.upcard);
 
-    const upcardSeen =
-      (context.playedCards || []).some(c => sameCard(c, context.upcard)) ||
-      (context.trickCards || []).some(t => sameCard(t.card, context.upcard));
+    // If dealer is NOT me, inject into their sampled hand
+    if (context.dealerIndex !== context.myIndex) {
 
-    if (!alreadyInHand && !upcardSeen) {
-      hands[dealer].push(context.upcard);
+      const dealer = context.dealerIndex;
+
+      const alreadyInHand = hands[dealer].some(c =>
+        sameCard(c, context.upcard)
+      );
+
+      const upcardSeen =
+        (context.playedCards || []).some(c => sameCard(c, context.upcard)) ||
+        (context.trickCards || []).some(t => sameCard(t.card, context.upcard));
+
+      if (!alreadyInHand && !upcardSeen) {
+        hands[dealer].push(context.upcard);
+      }
     }
   }
+
+  let remaining = deck.filter(card =>
+    !known.some(k => sameCard(k, card))
+  );
+
+  shuffle(remaining);
   for (let p = 0; p < 4; p++) {
     if (p === context.myIndex) continue;
 

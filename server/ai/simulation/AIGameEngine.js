@@ -56,7 +56,6 @@ export default class AIGameEngine {
   playRound() {
 
     if (this.trackStats) {
-      this.currentRoundLog = {};
       this.stats.totalRounds++;
     }
 
@@ -73,6 +72,7 @@ export default class AIGameEngine {
     };
     const upcard = deck.pop();
 
+    this.upcard = upcard;
     let trump = null;
     let makerTeam = null;
     let alonePlayerIndex = null;
@@ -187,6 +187,13 @@ export default class AIGameEngine {
 
     if (!trump) throw new Error("No trump selected");
 
+    if (this.trackStats) {
+      this.currentRoundLog = {
+        makerTeam,
+        alonePlayerIndex,
+        tricksWon: null
+      };
+    }
     const tricksWon = this.playTricks(
       hands,
       trump,
@@ -194,7 +201,9 @@ export default class AIGameEngine {
       makerTeam,
       dealerPickedUp // ⭐ pass flag
     );
-
+    if (this.trackStats) {
+      this.currentRoundLog.tricksWon = [...tricksWon];
+    }
     this.scoreRound(tricksWon, makerTeam, alonePlayerIndex);
   }
 
@@ -233,6 +242,7 @@ export default class AIGameEngine {
           playedCards: this.playedCards,
           voidInfo: this.voidInfo,
           dealerPickedUp,
+          dealerIndex: this.dealerIndex,
           upcard: this.upcard,
           tricksSoFar: {
             team0: tricksWon[0],
@@ -300,17 +310,30 @@ export default class AIGameEngine {
     const defending = 1 - makerTeam;
     const makerTricks = tricksWon[makerTeam];
 
-  if (makerTricks >= 3) {
-    if (alonePlayerIndex !== null && makerTricks === 5) {
-      this.scores[`team${makerTeam}`] += 4;
-    } else if (makerTricks === 5) {
-      this.scores[`team${makerTeam}`] += 2;
+    if (makerTricks >= 3) {
+      if (alonePlayerIndex !== null && makerTricks === 5) {
+        this.scores[`team${makerTeam}`] += 4;
+      } else if (makerTricks === 5) {
+        this.scores[`team${makerTeam}`] += 2;
+      } else {
+        this.scores[`team${makerTeam}`] += 1;
+      }
     } else {
-      this.scores[`team${makerTeam}`] += 1;
+      this.scores[`team${defending}`] += 2;
     }
-  } else {
-    this.scores[`team${defending}`] += 2;
-  }
+    if (this.trackStats) {
+      const defending = 1 - makerTeam;
+      const makerTricks = tricksWon[makerTeam];
+
+      const euchred = makerTricks < 3;
+
+      if (euchred) {
+        this.stats.team[defending].euchresInflicted++;
+        this.stats.team[makerTeam].euchresSuffered++;
+      }
+
+      this.stats.roundLogs.push(this.currentRoundLog);
+    }
   }
 
   /* ================= HELPERS ================= */
@@ -332,7 +355,14 @@ export default class AIGameEngine {
   /* ================= STATS ================= */
 
   resetStats() {
-    this.stats = { totalRounds: 0, roundLogs: [], team: {0:{},1:{}} };
+    this.stats = {
+      totalRounds: 0,
+      roundLogs: [],
+      team: {
+        0: { euchresInflicted: 0, euchresSuffered: 0, wins: 0 },
+        1: { euchresInflicted: 0, euchresSuffered: 0, wins: 0 }
+      }
+    };
   }
 
   getStats() {

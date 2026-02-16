@@ -2,8 +2,11 @@ import BaseAI from "./baseAI.js";
 import SimpleAI from "./simpleAI.js";
 import SoftmaxHeuristicAI from "./softmaxHeuristicAI.js";
 
+import OrderUpPassSimulator from "./simulation/orderUpPassSimulator.js";
+import { CallTrumpPassSimulator } from "./simulation/callTrumpPassSimulator.js";
 import OrderUpSimulator from "./simulation/orderUpSimulator.js";
 import PlayDecisionSim from "./simulation/playDecisionSimulator.js";
+import CallTrumpSimulator from "./simulation/callTrumpSimulator.js";
 import { sampleWorld } from "./simulation/worldSampler.js";
 
 import { cloneCtx } from "./simulation/simClone.js";
@@ -14,6 +17,7 @@ import { audit } from "./auditStats.js";
 import { profiler } from "./profiler.js";
 
 const DEBUG = false;
+const FAST = true;
 
 export default class MonteCarloAI extends BaseAI {
 
@@ -26,10 +30,10 @@ export default class MonteCarloAI extends BaseAI {
 
     this.fallbackAI = new SimpleAI();
     this.orderCounter = 0;
-
+    this.rolloutAIFactory = this.createAIFactory();
     this.playDecision = new PlayDecisionSim({
       simulations: this.simPlay,
-      aiFactory: (seatIndex) => this.createRolloutAI(seatIndex)
+      aiFactory: this.rolloutAIFactory
     });
   }
 
@@ -54,56 +58,71 @@ export default class MonteCarloAI extends BaseAI {
 
     const start = profiler.start("orderUp");
 
-    let callScore = 0;
-    let simsRun = 0;
+    let callTotal = 0;
+    let passTotal = 0;
+    let sims = 0;
 
     for (let i = 0; i < this.simOrder; i++) {
 
       const simCtx = cloneCtx(context);
 
-      simCtx.trump = context.upcard.suit;
-      simCtx.makerTeam = context.myIndex % 2;
-      if (DEBUG) {
-        console.log("CONTEXT CHECK", {
-          hand: context.hand.length,
-          played: context.playedCards?.length || 0,
-          trick: context.trickCards?.length || 0
-        });
-        console.log("simCtx CHECK", {
-          hand: simCtx.hand.length,
-          played: simCtx.playedCards?.length || 0,
-          trick: simCtx.trickCards?.length || 0
-        });
-      }
-      
       const fixedHands = sampleWorld(simCtx);
 
-      const sim = new OrderUpSimulator({
+      //
+      // ===== CALL EV =====
+      //
+
+      const callSim = new OrderUpSimulator({
         rootContext: simCtx,
-        aiFactory: this.createAIFactory(),
         fixedHands,
+        aiFactory: this.createAIFactory(),
         simulatePickup: true
       });
 
-      callScore += sim.run();
-      simsRun++;
+      callTotal += callSim.run();
 
-      if (i > 150) {
-        const avg = callScore / simsRun;
-        if (Math.abs(avg) > 1.5) break;
+      //
+      // ===== PASS EV =====
+      //
+
+      const passSim = new OrderUpPassSimulator({
+        rootContext: simCtx,
+        fixedHands,
+        aiFactory: this.createAIFactory()
+      });
+
+      const passResult = passSim.run();
+
+      if (passResult !== null) {
+
+        // someone ordered
+        passTotal += passResult;
+
+      } else {
+
+        // nobody ordered → round 2
+
+        const round2Sim = new CallTrumpPassSimulator({
+          rootContext: simCtx,
+          fixedHands,
+          aiFactory: this.createAIFactory()
+        });
+
+        passTotal += round2Sim.run();
       }
+
+      sims++;
     }
 
-    const avg = callScore / simsRun;
-
-    audit.calls++;
-    if (avg > 0) audit.positiveCalls++;
-
+    const callEV = callTotal / sims;
+    const passEV = passTotal / sims;
+    console.log("OrderUpEV", callEV);
+    console.log("PassEV", passEV);
     profiler.end("orderUp", start);
 
     return {
-      call: avg > this.callThreshold,
-      alone: avg > 2.5
+      call: callEV > passEV,
+      alone: callEV > 2.5
     };
   }
 
@@ -128,6 +147,63 @@ export default class MonteCarloAI extends BaseAI {
 
     return card;
   }
+  /* ================= call trump ================= */ 
+
+  callTrump(context) {
+
+    const start = profiler.start("callTrump");
+
+    const candidates = this.getCandidateSuits(context);
+
+    let bestSuit = null;
+    let bestEV = -Infinity;
+
+    for (const suit of candidates) {
+
+      let total = 0;
+      let sims = 0;
+
+      for (let i = 0; i < this.simOrder; i++) {
+
+        const simCtx = cloneCtx(context);
+
+        const fixedHands = sampleWorld(simCtx);
+
+        const sim = new CallTrumpSimulator({
+          rootContext: simCtx,
+          suit,
+          fixedHands,
+          aiFactory: this.createAIFactory()
+        });
+
+        total += sim.run();
+        sims++;
+        // Early stop if obvious
+        if (i > 150) {
+          const avg = total / sims;
+          if (Math.abs(avg) > 1.5) break;
+        }
+      }
+
+      const avgEV = total / sims;
+      console.log("Call EV", suit, avgEV);
+
+      if (avgEV > bestEV) {
+        bestEV = avgEV;
+        bestSuit = suit;
+      }
+    }
+
+    profiler.end("callTrump", start);
+
+    return {
+      call: bestEV > 0,
+      suit: bestSuit,
+      alone: bestEV > 2.5
+    };
+  }
+
+
 
   /* ================= ACTION ================= */
 
@@ -141,8 +217,35 @@ export default class MonteCarloAI extends BaseAI {
       case "play_card":
         return { type: "play_card", card: this.playCard(context) };
 
+      case "call_trump":
+        return { type: "call_trump", card: this.callTrump(context) };
+
       default:
         return this.fallbackAI.getAction(context);
     }
+  }
+
+  getCandidateSuits(context) {
+
+    const suits = ["hearts","diamonds","clubs","spades"];
+    const heuristic = new SoftmaxHeuristicAI({ temperature: 0.3 });
+
+    const scored = suits
+      .filter(s => s !== context.upcard.suit)
+      .map(s => ({
+        suit: s,
+        score: heuristic.evaluateHand(context.hand, s)
+      }))
+      .sort((a,b) => b.score - a.score);
+
+    // Always include best
+    const candidates = [scored[0].suit];
+
+    // Include second if close
+    if (scored[1] && scored[1].score > scored[0].score - 15) {
+      candidates.push(scored[1].suit);
+    }
+
+    return candidates;
   }
 }

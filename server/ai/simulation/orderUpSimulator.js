@@ -1,7 +1,7 @@
 import { determineTrickWinner } from "../../engine/trickLogic.js";
 import { getEffectiveSuit } from "../../engine/cardUtils.js";
 import { cloneCtx, cloneHands } from "./simClone.js";
-
+import PlayRolloutSim from "./playRolloutSimulator.js";
 
 const DEBUG = false;
 
@@ -58,16 +58,37 @@ export default class OrderUpSimulator {
 
   run() {
 
-    if (
-      this.simulatePickup &&
-      this.ctx.upcard &&
-      this.trump === this.ctx.upcard.suit
-    ) {
-      this.applyPickup();
+      // Apply pickup if dealer ordered up
+      if (
+        this.simulatePickup &&
+        this.ctx.upcard &&
+        this.trump === this.ctx.upcard.suit
+      ) {
+        this.applyPickup();
+      }
+
+      // Build rollout context
+      const rolloutCtx = {
+        ...this.ctx,
+        hand: this.hands[this.myIndex],
+        trickCards: this.ctx.trickCards ?? [],
+        playedCards: this.playedCards ?? [],
+        tricksSoFar: this.ctx.tricksSoFar ?? { team0: 0, team1: 0 }
+      };
+      if (DEBUG){ 
+        console.log(rolloutCtx)
+      } 
+      const rollout = new PlayRolloutSim({
+        context: rolloutCtx,
+        fixedHands: this.hands,
+        aiFactory: (seat) => this.ais[seat],
+        rootPlayerIndex: this.myIndex,
+        makerIndex: this.myIndex
+      });
+
+      return rollout.run();
     }
 
-    return this.playOut();
-  }
 
   /* ================= PICKUP ================= */
 
@@ -93,173 +114,6 @@ export default class OrderUpSimulator {
 
     if (this.hands[dealer].length !== 5) {
       throw new Error("Pickup hand size wrong");
-    }
-  }
-
-  /* ================= PLAYOUT ================= */
-
-  playOut() {
-
-    let tricks = [
-      this.ctx.tricksSoFar?.team0 ?? 0,
-      this.ctx.tricksSoFar?.team1 ?? 0
-    ];
-
-    let leader = this.ctx.trickLeader;
-
-    let trickCards = [...(this.ctx.trickCards || [])];
-
-    if (trickCards.length > 0) {
-      leader = this.finishTrick(trickCards, leader, tricks);
-    }
-
-    while (tricks[0] + tricks[1] < 5) {
-
-      trickCards = [];
-      let leadSuit = null;
-
-      for (let offset = 0; offset < 4; offset++) {
-
-        const player = (leader + offset) % 4;
-        const ai = this.ais[player];
-
-        const action = ai.getAction({
-          phase: "play_card",
-          hand: this.hands[player],
-          trump: this.trump,
-          trickCards: [...trickCards],
-          leadSuit,
-          trickLeader: leader,
-          myIndex: player,
-          makerTeam: this.ctx.makerTeam,
-          alonePlayerIndex: this.ctx.alonePlayerIndex,
-          voidInfo: this.ctx.voidInfo || {0:{},1:{},2:{},3:{}},
-          playedCards: [...this.playedCards]
-        });
-
-        if (!action || !action.card) {
-          throw new Error("Rollout returned no card");
-        }
-
-        let card = action.card;
-
-        if (!leadSuit) {
-          leadSuit = getEffectiveSuit(card, this.trump);
-        }
-
-        card = this.enforceLegalPlay(player, card, leadSuit);
-
-        this.removeCard(this.hands[player], card);
-
-        trickCards.push({ player, card });
-      }
-
-      const winnerOffset = determineTrickWinner(
-        trickCards.map(t => t.card),
-        leadSuit,
-        this.trump
-      );
-
-      leader = trickCards[winnerOffset].player;
-      tricks[leader % 2]++;
-      for (const t of trickCards) {
-        this.playedCards.push(t.card);
-      }
-      trickCards = [];
-    }
-
- 
-    const result = this.scoreRound(
-      tricks,
-      this.ctx.makerTeam,
-      this.ctx.alonePlayerIndex ?? null
-    );
-    
-    return result
-  }
-
-  /* ================= FINISH TRICK ================= */
-
-  finishTrick(trickCards, leader, tricks) {
-
-    let leadSuit = getEffectiveSuit(trickCards[0].card, this.trump);
-
-    for (let i = trickCards.length; i < 4; i++) {
-
-      const player = (leader + i) % 4;
-      const ai = this.ais[player];
-
-      const action = ai.getAction({
-        phase: "play_card",
-        hand: this.hands[player],
-        trump: this.trump,
-        trickCards: [...trickCards],
-        leadSuit,
-        trickLeader: leader,
-        myIndex: player,
-        playedCards: [...this.playedCards]
-      });
-
-      if (!action || !action.card) {
-        throw new Error("finishTrick — no card");
-      }
-
-      let card = this.enforceLegalPlay(player, action.card, leadSuit);
-
-      this.removeCard(this.hands[player], card);
-      this.playedCards.push(card);
-
-      trickCards.push({ player, card });
-    }
-
-    const winnerOffset = determineTrickWinner(
-      trickCards.map(t => t.card),
-      leadSuit,
-      this.trump
-    );
-
-    const winner = trickCards[winnerOffset].player;
-    tricks[winner % 2]++;
-    for (const t of trickCards) {
-      this.playedCards.push(t.card);
-    }
-    return winner;
-  }
-
-  /* ================= HELPERS ================= */
-
-  enforceLegalPlay(player, card, leadSuit) {
-
-    const hand = this.hands[player];
-
-    const follow = hand.filter(c =>
-      getEffectiveSuit(c, this.trump) === leadSuit
-    );
-
-    if (!follow.length) return card;
-
-    const legal = follow.some(c =>
-      c.rank === card.rank && c.suit === card.suit
-    );
-
-    return legal ? card : follow[0];
-  }
-
-  scoreRound(tricks, makerTeam, alonePlayerIndex) {
-
-    const makers = tricks[makerTeam];
-
-    if (makers >= 3) {
-
-      if (alonePlayerIndex !== null && makers === 5) return 4;
-      if (makers === 5) return 2;
-
-      return 1;
-
-    } else {
-
-      return -2;
-
     }
   }
 

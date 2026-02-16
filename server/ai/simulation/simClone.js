@@ -2,18 +2,14 @@ export function cloneCtx(ctx) {
   return {
     ...ctx,
 
-    hand: ctx.hand
-      ? ctx.hand.map(c => ({ rank: c.rank, suit: c.suit }))
-      : undefined,
+    hand: ctx.hand ? ctx.hand.slice() : undefined,
 
-    upcard: ctx.upcard
-      ? { rank: ctx.upcard.rank, suit: ctx.upcard.suit }
-      : undefined,
+    upcard: ctx.upcard ?? null,
 
     trickCards: ctx.trickCards
       ? ctx.trickCards.map(t => ({
           player: t.player,
-          card: { rank: t.card.rank, suit: t.card.suit }
+          card: t.card
         }))
       : [],
 
@@ -21,27 +17,33 @@ export function cloneCtx(ctx) {
       ? { team0: ctx.tricksSoFar.team0, team1: ctx.tricksSoFar.team1 }
       : { team0: 0, team1: 0 },
 
+    // ⚠️ shallow copy instead of structuredClone
     voidInfo: ctx.voidInfo
-      ? structuredClone(ctx.voidInfo)
+      ? {
+          0: { ...ctx.voidInfo[0] },
+          1: { ...ctx.voidInfo[1] },
+          2: { ...ctx.voidInfo[2] },
+          3: { ...ctx.voidInfo[3] }
+        }
       : {0:{},1:{},2:{},3:{}},
 
-    playedCards: ctx.playedCards
-      ? ctx.playedCards.map(c => ({ rank: c.rank, suit: c.suit }))
-      : [],
+    playedCards: ctx.playedCards ? ctx.playedCards.slice() : [],
 
-    alonePlayerIndex: ctx.alonePlayerIndex ?? null
+    alonePlayerIndex: ctx.alonePlayerIndex ?? null,
+    dealerPickedUp: ctx.dealerPickedUp ?? null,
+    dealerIndex: ctx.dealerIndex ?? null
   };
 }
 
 function cloneHand(hand) {
-  return hand.map(c => ({ rank: c.rank, suit: c.suit }));
+  return hand ? hand.slice() : [];
 }
 
 export function cloneHands(hands) {
   return {
-    0: cloneHand(hands[0] || []),
-    1: cloneHand(hands[1] || []),
-    2: cloneHand(hands[2] || []),
-    3: cloneHand(hands[3] || [])
+    0: cloneHand(hands[0]),
+    1: cloneHand(hands[1]),
+    2: cloneHand(hands[2]),
+    3: cloneHand(hands[3])
   };
 }
