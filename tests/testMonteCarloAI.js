@@ -6,7 +6,7 @@ import { audit } from "../server/ai/auditStats.js";
 import { profiler } from "../server/ai/profiler.js";
 
 
-const NUM_GAMES = 200;
+const NUM_GAMES = 5;
 
 // const THRESHOLDS = [0.25, 0.3, 0.35, 0.4, 0.45, 0.5];
 const THRESHOLDS = [0.25];

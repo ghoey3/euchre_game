@@ -5,7 +5,8 @@ import { cloneCtx, cloneHands } from "./simClone.js";
 
 import { validateWorld } from "./monteSentinel.js";
 
-const DEBUG = false;
+const DEBUG = true;
+const FAST = false; 
 
 function dlog(...args) {
   if (DEBUG) console.log("[ROLLOUT]", ...args);
@@ -35,7 +36,6 @@ export default class PlayRolloutSim {
     for (let i = 0; i < 4; i++) {
 
       let ai = null;
-
       if (aiFactory) {
         ai = aiFactory(i);
         dlog("AI factory seat", i, "->", ai?.constructor?.name);
@@ -77,7 +77,7 @@ export default class PlayRolloutSim {
       (this.playedCards.length || 0) +
       (this.ctx.trickCards.length || 0)
     );
-    validateWorld({
+    if (!FAST) validateWorld({
       hands: this.hands,
       playedCards: this.playedCards,
       trickCards: this.ctx.trickCards
@@ -118,7 +118,7 @@ export default class PlayRolloutSim {
     ];
 
     let trickCards = [...(this.ctx.trickCards || [])];
-    validateWorld({
+    if (!FAST) validateWorld({
       hands: this.hands,
       playedCards: this.playedCards,
       trickCards
@@ -182,7 +182,7 @@ export default class PlayRolloutSim {
           this.removeCard(hand, card);
           trickCards.push({ player, card });
 
-          validateWorld({
+          if (!FAST) validateWorld({
             hands: this.hands,
             playedCards: this.playedCards,
             trickCards
@@ -249,25 +249,43 @@ export default class PlayRolloutSim {
       for (const t of trickCards) {
         this.playedCards.push(t.card);
       }
-      validateWorld({
+      if (!FAST) validateWorld({
         hands: this.hands,
         playedCards: this.playedCards,
         trickCards: []
       });
       trickCards = [];
 
-      this.checkInvariant();
+      if (!FAST) this.checkInvariant();
     }
 
     profiler.end("rollout", start);
 
-    const myTeam = this.rootPlayerIndex % 2;
-
     dlog("=== RUN END ===");
 
-    return myTeam === 0
-      ? tricks[0] - tricks[1]
-      : tricks[1] - tricks[0];
+    const makerTeam = this.ctx.makerTeam;
+    const rootTeam = this.rootPlayerIndex % 2;
+
+    const makerTricks = tricks[makerTeam];
+
+    let makerEV;
+
+    if (makerTricks >= 3) {
+
+      if (makerTricks === 5) {
+        makerEV =
+          this.ctx.alonePlayerIndex != null ? 4 : 2;
+      } else {
+        makerEV = 1;
+      }
+
+    } else {
+
+      makerEV = -2; // euchred
+
+    }
+
+    return rootTeam === makerTeam ? makerEV : -makerEV;
   }
 
   checkInvariant() {

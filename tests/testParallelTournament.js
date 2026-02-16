@@ -1,5 +1,9 @@
-import AIGameEngine from "../server/ai/simulation/AIGameEngine.js";
-import MonteCarloAI from "../server/ai/monteCarloAI.js";
+import { Worker } from "worker_threads";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const NUM_GAMES = 300;
 
@@ -39,29 +43,6 @@ function updateElo(A, B, scoreA) {
 
   elo[A] = RA + K * (scoreA - expectedA);
   elo[B] = RB + K * (scoreB - expectedB);
-}
-
-function makeData() {
-  return {
-    games: 0,
-    wins: 0,
-    points: 0,
-
-    calls: 0,
-    callLosses: 0,
-
-    euchres: 0,
-    euchresInflicted: 0,
-    euchresSuffered: 0,
-
-    pointDiffs: []
-  };
-}
-
-function variance(arr) {
-  if (!arr.length) return 0;
-  const mean = arr.reduce((a,b)=>a+b,0)/arr.length;
-  return arr.reduce((a,b)=>a+(b-mean)**2,0)/arr.length;
 }
 
 function report(label, data) {
@@ -112,89 +93,50 @@ function report(label, data) {
   console.log("Call success:", ((1-callFailRate)*100).toFixed(2)+"%");
 }
 
-function playMatch(tA, tB) {
 
-  const A = makeData();
-  const B = makeData();
+function variance(arr) {
+  if (!arr.length) return 0;
+  const mean = arr.reduce((a,b)=>a+b,0)/arr.length;
+  return arr.reduce((a,b)=>a+(b-mean)**2,0)/arr.length;
+}
+
+const promises = [];
+
+for (let i = 0; i < THRESHOLDS.length; i++) {
+  for (let j = i + 1; j < THRESHOLDS.length; j++) {
+
+    promises.push(new Promise((resolve, reject) => {
+
+      const worker = new Worker(
+      path.resolve(__dirname, "./matchWorker.js"),
+        {
+          workerData: { tA: THRESHOLDS[i], tB:THRESHOLDS[j]  }
+        }
+      );
+      console.log(`launched match ${ THRESHOLDS[i]} vs ${THRESHOLDS[j] }`)
+
+      worker.on("message", resolve);
+      worker.on("error", reject);
+
+      worker.on("exit", code => {
+        if (code !== 0) {
+          console.error("Worker exited with code", code);
+        }
+      });
+
+    }));
+
+  }
+}
+
+const results = await Promise.all(promises);
+
+results.sort((a,b) => a.tA - b.tA || a.tB - b.tB);
+
+for (const { tA, tB, A, B } of results) {
 
   console.log(`\n\n===== MATCH ${tA} vs ${tB} =====`);
 
-  for (let g = 0; g < NUM_GAMES; g++) {
-
-    if (g % 50 === 0) console.log("game", g);
-
-    const swap = g % 2 === 0;
-
-    const players = swap
-      ? [
-          new MonteCarloAI({ callThreshold: tA }),
-          new MonteCarloAI({ callThreshold: tB }),
-          new MonteCarloAI({ callThreshold: tA }),
-          new MonteCarloAI({ callThreshold: tB })
-        ]
-      : [
-          new MonteCarloAI({ callThreshold: tB }),
-          new MonteCarloAI({ callThreshold: tA }),
-          new MonteCarloAI({ callThreshold: tB }),
-          new MonteCarloAI({ callThreshold: tA })
-        ];
-
-    const engine = new AIGameEngine(players, { trackStats: true });
-
-    const finalScore = engine.playGame();
-    const s = engine.stats.team;
-
-    const teamA = swap ? 0 : 1;
-    const teamB = swap ? 1 : 0;
-
-    const statsA = s[teamA];
-    const statsB = s[teamB];
-
-    A.games++;
-    B.games++;
-
-    const ptsA = finalScore[`team${teamA}`];
-    const ptsB = finalScore[`team${teamB}`];
-
-    A.points += ptsA;
-    B.points += ptsB;
-
-    A.pointDiffs.push(ptsA - ptsB);
-    B.pointDiffs.push(ptsB - ptsA);
-
-    if (ptsA > ptsB) A.wins++;
-    else B.wins++;
-
-    A.euchresInflicted += statsA.euchresInflicted;
-    A.euchresSuffered += statsA.euchresSuffered;
-
-    B.euchresInflicted += statsB.euchresInflicted;
-    B.euchresSuffered += statsB.euchresSuffered;
-
-    for (const r of engine.stats.roundLogs) {
-
-      if (r.makerTeam === teamA) {
-        A.calls++;
-        let makerTricks = r.tricksWon[teamA]
-
-        if (makerTricks < 3) {
-          A.callLosses++;
-          A.euchres++;
-        }
-      }
-
-      if (r.makerTeam === teamB) {
-        B.calls++;
-
-        let makerTricks = r.tricksWon[teamB]
-
-        if (makerTricks < 3) {
-          B.callLosses++;
-          B.euchres++;
-        }
-      }
-    }
-  } 
   ensureStandings(tA);
   ensureStandings(tB);
 
@@ -223,11 +165,6 @@ function playMatch(tA, tB) {
   report(`Threshold ${tB}`, B);
 }
 
-for (let i = 0; i < THRESHOLDS.length; i++) {
-  for (let j = i + 1; j < THRESHOLDS.length; j++) {
-    playMatch(THRESHOLDS[i], THRESHOLDS[j]);
-  }
-}
 
 console.log("\n\n===== TOURNAMENT RANKINGS =====");
 
@@ -253,4 +190,4 @@ Object.entries(elo)
   .sort((a,b)=>b[1]-a[1])
   .forEach(([t,r])=>{
     console.log(`Threshold ${t}: ${r.toFixed(1)}`);
-  });
+});

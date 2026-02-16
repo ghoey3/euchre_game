@@ -1,0 +1,341 @@
+===== MATCH 0.25 vs 0.35 =====
+
+==============================
+HEALTH REPORT — Threshold 0.25
+==============================
+
+🏆 Performance
+Win rate: 50.33%
+Points/game: 8.090
+
+⚖️ Risk
+Variance: 24.446
+Risk-adjusted EV: 1.636
+
+🧬 Nash proxy
+Distance from 50%: 0.33%
+
+🔁 Regret signals
+Call failure rate: 11.78%
+Severe loss rate: 11.78%
+
+🔥 Pressure
+Net pressure: -0.17
+pressure per call: -0.027070063694267517
+
+🎯 Decision quality
+Call success: 88.22%
+
+==============================
+HEALTH REPORT — Threshold 0.35
+==============================
+
+🏆 Performance
+Win rate: 49.67%
+Points/game: 8.210
+
+⚖️ Risk
+Variance: 24.446
+Risk-adjusted EV: 1.661
+
+🧬 Nash proxy
+Distance from 50%: 0.33%
+
+🔁 Regret signals
+Call failure rate: 9.94%
+Severe loss rate: 9.94%
+
+🔥 Pressure
+Net pressure: 0.17
+pressure per call: 0.029651162790697676
+
+🎯 Decision quality
+Call success: 90.06%
+
+
+===== MATCH 0.25 vs 0.45 =====
+
+==============================
+HEALTH REPORT — Threshold 0.25
+==============================
+
+🏆 Performance
+Win rate: 58.00%
+Points/game: 8.533
+
+⚖️ Risk
+Variance: 23.803
+Risk-adjusted EV: 1.749
+
+🧬 Nash proxy
+Distance from 50%: 8.00%
+
+🔁 Regret signals
+Call failure rate: 11.08%
+Severe loss rate: 11.08%
+
+🔥 Pressure
+Net pressure: -0.07
+pressure per call: -0.010926118626430802
+
+🎯 Decision quality
+Call success: 88.92%
+
+==============================
+HEALTH REPORT — Threshold 0.45
+==============================
+
+🏆 Performance
+Win rate: 42.00%
+Points/game: 7.650
+
+⚖️ Risk
+Variance: 23.803
+Risk-adjusted EV: 1.568
+
+🧬 Nash proxy
+Distance from 50%: 8.00%
+
+🔁 Regret signals
+Call failure rate: 11.58%
+Severe loss rate: 11.58%
+
+🔥 Pressure
+Net pressure: 0.07
+pressure per call: 0.012665862484921592
+
+🎯 Decision quality
+Call success: 88.42%
+
+
+===== MATCH 0.25 vs 0.55 =====
+
+==============================
+HEALTH REPORT — Threshold 0.25
+==============================
+
+🏆 Performance
+Win rate: 60.00%
+Points/game: 8.627
+
+⚖️ Risk
+Variance: 22.944
+Risk-adjusted EV: 1.801
+
+🧬 Nash proxy
+Distance from 50%: 10.00%
+
+🔁 Regret signals
+Call failure rate: 12.49%
+Severe loss rate: 12.49%
+
+🔥 Pressure
+Net pressure: -0.22
+pressure per call: -0.03296703296703297
+
+🎯 Decision quality
+Call success: 87.51%
+
+==============================
+HEALTH REPORT — Threshold 0.55
+==============================
+
+🏆 Performance
+Win rate: 40.00%
+Points/game: 7.703
+
+⚖️ Risk
+Variance: 22.944
+Risk-adjusted EV: 1.608
+
+🧬 Nash proxy
+Distance from 50%: 10.00%
+
+🔁 Regret signals
+Call failure rate: 11.70%
+Severe loss rate: 11.70%
+
+🔥 Pressure
+Net pressure: 0.22
+pressure per call: 0.04195804195804196
+
+🎯 Decision quality
+Call success: 88.30%
+
+
+===== MATCH 0.35 vs 0.45 =====
+
+==============================
+HEALTH REPORT — Threshold 0.35
+==============================
+
+🏆 Performance
+Win rate: 56.00%
+Points/game: 8.277
+
+⚖️ Risk
+Variance: 26.509
+Risk-adjusted EV: 1.608
+
+🧬 Nash proxy
+Distance from 50%: 6.00%
+
+🔁 Regret signals
+Call failure rate: 10.88%
+Severe loss rate: 10.88%
+
+🔥 Pressure
+Net pressure: -0.056666666666666664
+pressure per call: -0.009110396570203644
+
+🎯 Decision quality
+Call success: 89.12%
+
+==============================
+HEALTH REPORT — Threshold 0.45
+==============================
+
+🏆 Performance
+Win rate: 44.00%
+Points/game: 7.750
+
+⚖️ Risk
+Variance: 26.509
+Risk-adjusted EV: 1.505
+
+🧬 Nash proxy
+Distance from 50%: 6.00%
+
+🔁 Regret signals
+Call failure rate: 11.09%
+Severe loss rate: 11.09%
+
+🔥 Pressure
+Net pressure: 0.056666666666666664
+pressure per call: 0.010137149672033392
+
+🎯 Decision quality
+Call success: 88.91%
+
+
+===== MATCH 0.35 vs 0.55 =====
+
+==============================
+HEALTH REPORT — Threshold 0.35
+==============================
+
+🏆 Performance
+Win rate: 53.67%
+Points/game: 8.367
+
+⚖️ Risk
+Variance: 24.875
+Risk-adjusted EV: 1.678
+
+🧬 Nash proxy
+Distance from 50%: 3.67%
+
+🔁 Regret signals
+Call failure rate: 10.64%
+Severe loss rate: 10.64%
+
+🔥 Pressure
+Net pressure: -0.05
+pressure per call: -0.007903055848261328
+
+🎯 Decision quality
+Call success: 89.36%
+
+==============================
+HEALTH REPORT — Threshold 0.55
+==============================
+
+🏆 Performance
+Win rate: 46.33%
+Points/game: 7.777
+
+⚖️ Risk
+Variance: 24.875
+Risk-adjusted EV: 1.559
+
+🧬 Nash proxy
+Distance from 50%: 3.67%
+
+🔁 Regret signals
+Call failure rate: 11.13%
+Severe loss rate: 11.13%
+
+🔥 Pressure
+Net pressure: 0.05
+pressure per call: 0.008928571428571428
+
+🎯 Decision quality
+Call success: 88.87%
+
+
+===== MATCH 0.45 vs 0.55 =====
+
+==============================
+HEALTH REPORT — Threshold 0.45
+==============================
+
+🏆 Performance
+Win rate: 50.33%
+Points/game: 8.010
+
+⚖️ Risk
+Variance: 26.366
+Risk-adjusted EV: 1.560
+
+🧬 Nash proxy
+Distance from 50%: 0.33%
+
+🔁 Regret signals
+Call failure rate: 11.28%
+Severe loss rate: 11.28%
+
+🔥 Pressure
+Net pressure: -0.08333333333333333
+pressure per call: -0.013819789939192924
+
+🎯 Decision quality
+Call success: 88.72%
+
+==============================
+HEALTH REPORT — Threshold 0.55
+==============================
+
+🏆 Performance
+Win rate: 49.67%
+Points/game: 8.130
+
+⚖️ Risk
+Variance: 26.366
+Risk-adjusted EV: 1.583
+
+🧬 Nash proxy
+Distance from 50%: 0.33%
+
+🔁 Regret signals
+Call failure rate: 10.24%
+Severe loss rate: 10.24%
+
+🔥 Pressure
+Net pressure: 0.08333333333333333
+pressure per call: 0.014302059496567507
+
+🎯 Decision quality
+Call success: 89.76%
+
+
+===== TOURNAMENT RANKINGS =====
+Threshold 0.25 | Match wins: 3 | Game WR: 56.11% | Avg pts: 2525.00
+Threshold 0.35 | Match wins: 2 | Game WR: 53.11% | Avg pts: 2485.33
+Threshold 0.45 | Match wins: 1 | Game WR: 45.44% | Avg pts: 2341.00
+Threshold 0.55 | Match wins: 0 | Game WR: 45.33% | Avg pts: 2361.00
+
+===== ELO RATINGS =====
+Threshold 0.25: 1502.9
+Threshold 0.35: 1501.4
+Threshold 0.45: 1497.8
+Threshold 0.55: 1497.8
