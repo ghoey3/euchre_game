@@ -1,7 +1,7 @@
 import { determineTrickWinner } from "../../engine/trickLogic.js";
 import { getEffectiveSuit } from "../../engine/cardUtils.js";
 
-const DEBUG = true;
+const DEBUG = false;
 
 export default class PlaySimulator {
 
@@ -9,9 +9,9 @@ export default class PlaySimulator {
 
     if (!fixedHands) throw new Error("PlaySimulator needs fixedHands");
 
-    this.ctx = JSON.parse(JSON.stringify(context));
-    this.ai = playoutAI;
-    this.hands = JSON.parse(JSON.stringify(fixedHands));
+    this.ctx = cloneCtx(context);
+    this.hands = cloneHands(fixedHands);
+    this.ai = playoutAI
 
     this.trump = this.ctx.trump;
     this.myIndex = this.ctx.myIndex;
@@ -80,7 +80,7 @@ export default class PlaySimulator {
             leadSuit,
             trickLeader: this.leader,
             myIndex: player,
-            played_cards: this.playedCards
+           playedCards: this.playedCards
           });
 
           card = action.card;
@@ -127,7 +127,7 @@ export default class PlaySimulator {
         leadSuit,
         trickLeader: this.leader,
         myIndex: player,
-        played_cards: this.playedCards
+        playedCards: this.playedCards
       });
 
       let card = action.card;

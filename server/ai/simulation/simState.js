@@ -1,3 +1,5 @@
+import { cloneHands } from "./simClone.js";
+
 export default class SimState {
   constructor({
     hands,
@@ -30,13 +32,13 @@ export default class SimState {
 
   clone() {
     return new SimState({
-      hands: JSON.parse(JSON.stringify(this.hands)),
-      trump: this.trump,
-      leader: this.leader,
-      trickCards: JSON.parse(JSON.stringify(this.trickCards)),
-      tricksWon: [...this.tricksWon],
-      voidInfo: JSON.parse(JSON.stringify(this.voidInfo)),
-      alonePlayerIndex: this.alonePlayerIndex
+        hands: cloneHands(this.hands),
+        trump: this.trump,
+        leader: this.leader,
+        trickCards: this.trickCards.map(t => ({ ...t })),
+        tricksWon: [...this.tricksWon],
+        voidInfo: structuredClone(this.voidInfo),
+        alonePlayerIndex: this.alonePlayerIndex
     });
   }
 

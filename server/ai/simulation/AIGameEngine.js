@@ -3,6 +3,7 @@ import { determineTrickWinner } from "../../engine/trickLogic.js";
 import { getEffectiveSuit } from "../../engine/cardUtils.js";
 
 export default class AIGameEngine {
+
   constructor(players, options = {}) {
     this.players = players;
     this.winningScore = options.winningScore ?? 10;
@@ -16,11 +17,10 @@ export default class AIGameEngine {
     }
   }
 
-  /* ============================= */
-  /* ========= GAME LOOP ========= */
-  /* ============================= */
+  /* ================= GAME LOOP ================= */
 
   playGame() {
+
     this.scores = { team0: 0, team1: 0 };
 
     while (!this.isGameOver()) {
@@ -29,11 +29,8 @@ export default class AIGameEngine {
     }
 
     if (this.trackStats) {
-      if (this.scores.team0 > this.scores.team1) {
-        this.stats.team0Wins++;
-      } else {
-        this.stats.team1Wins++;
-      }
+      const winner = this.scores.team0 > this.scores.team1 ? 0 : 1;
+      this.stats.team[winner].wins++;
     }
 
     return this.scores;
@@ -54,401 +51,294 @@ export default class AIGameEngine {
     return playerIndex % 2;
   }
 
-  /* ============================= */
-  /* ========= ROUND LOGIC ======= */
-  /* ============================= */
+  /* ================= ROUND ================= */
+
   playRound() {
-    if (this.trackStats) this.stats.totalRounds++;
+
+    if (this.trackStats) {
+      this.currentRoundLog = {};
+      this.stats.totalRounds++;
+    }
 
     this.playedCards = [];
     this.voidInfo = { 0:{},1:{},2:{},3:{} };
 
     const deck = shuffle(createDeck());
     const hands = this.dealCards(deck);
+    this.cardsRemaining = {
+      0: hands[0].length,
+      1: hands[1].length,
+      2: hands[2].length,
+      3: hands[3].length
+    };
     const upcard = deck.pop();
 
     let trump = null;
     let makerTeam = null;
     let alonePlayerIndex = null;
+    let dealerPickedUp = false; // ⭐ NEW
 
-    /* ============================= */
-    /* ===== FIRST ROUND BIDDING === */
-    /* ============================= */
+    /* ===== FIRST ROUND ===== */
 
     for (let i = 1; i <= 4; i++) {
-        const playerIndex = (this.dealerIndex + i) % 4;
 
-        const context = {
+      const playerIndex = (this.dealerIndex + i) % 4;
+
+      const action = this.players[playerIndex].getAction({
         phase: "order_up",
         hand: hands[playerIndex],
         upcard,
         dealerIndex: this.dealerIndex,
         myIndex: playerIndex,
-        score: this.scores
-        };
+        score: this.scores,
+        tricksSoFar: {
+            team0: 0,
+            team1: 0
+         },
+        cardsRemaining: {
+          0: hands[0].length,
+          1: hands[1].length,
+          2: hands[2].length,
+          3: hands[3].length
+        },
+      });
 
-        const action = this.players[playerIndex].getAction(context);
+      if (!action.call) continue;
 
-        /* -------- VALIDATE ACTION -------- */
+      trump = upcard.suit;
+      makerTeam = this.getTeam(playerIndex);
+      alonePlayerIndex = action.alone ? playerIndex : null;
 
-        if (!action || action.type !== "order_up") {
-        throw new Error(
-            `Player ${playerIndex} returned invalid order_up action`
-        );
-        }
+      hands[this.dealerIndex].push(upcard);
+      dealerPickedUp = true; // ⭐ IMPORTANT
 
-        if (typeof action.call !== "boolean") {
-        throw new Error(
-            `Player ${playerIndex} order_up missing call boolean`
-        );
-        }
-
-        if (!action.call) continue;
-
-        /* -------- APPLY ORDER UP -------- */
-
-        trump = upcard.suit;
-        makerTeam = this.getTeam(playerIndex);
-        alonePlayerIndex = action.alone ? playerIndex : null;
-
-        if (this.trackStats && action.alone) {
-        this.stats.aloneCalls++;
-        }
-
-        /* -------- DEALER PICKUP -------- */
-
-        hands[this.dealerIndex].push(upcard);
-
-        const discard = this.players[this.dealerIndex].getAction({
+      const discard = this.players[this.dealerIndex].getAction({
         phase: "discard",
         hand: hands[this.dealerIndex],
         trump,
+        tricksSoFar: {
+          team0: 0,
+          team1: 0
+        },
         dealerIndex: this.dealerIndex
-        });
+      });
 
-        /* -------- VALIDATE DISCARD -------- */
+      const idx = hands[this.dealerIndex].findIndex(
+        c => c.rank === discard.card.rank && c.suit === discard.card.suit
+      );
 
-        if (!discard || discard.type !== "discard") {
-        throw new Error("Dealer returned invalid discard action");
-        }
+      hands[this.dealerIndex].splice(idx, 1);
 
-        if (!discard.card) {
-        throw new Error("Dealer discard missing card");
-        }
-
-        const discardIndex = hands[this.dealerIndex].findIndex(
-        c =>
-            c.rank === discard.card.rank &&
-            c.suit === discard.card.suit
-        );
-
-        if (discardIndex === -1) {
-        throw new Error(
-            "Dealer attempted to discard a card not in hand"
-        );
-        }
-
-        hands[this.dealerIndex].splice(discardIndex, 1);
-        this.playedCards.push(discard.card);
-
-        break;
+      break;
     }
 
-    /* ============================= */
-    /* ===== SECOND ROUND BIDDING == */
-    /* ============================= */
+    /* ===== SECOND ROUND ===== */
 
     if (!trump) {
-        for (let i = 1; i <= 4; i++) {
+
+      for (let i = 1; i <= 4; i++) {
+
         const playerIndex = (this.dealerIndex + i) % 4;
 
-        const baseContext = {
+        let action = this.players[playerIndex].getAction({
+          phase: "call_trump",
+          hand: hands[playerIndex],
+          upcard,
+          dealerIndex: this.dealerIndex,
+          myIndex: playerIndex,
+          score: this.scores,
+          cardsRemaining: {
+            0: hands[0].length,
+            1: hands[1].length,
+            2: hands[2].length,
+            3: hands[3].length
+          },
+        });
+
+        if (i === 4 && !action.call) {
+          action = this.players[playerIndex].getAction({
+            phase: "call_trump_forced",
             hand: hands[playerIndex],
             upcard,
             dealerIndex: this.dealerIndex,
             myIndex: playerIndex,
-            score: this.scores
-        };
-
-        let action = this.players[playerIndex].getAction({
-            ...baseContext,
-            phase: "call_trump"
-        });
-
-        if (!action || action.type !== "call_trump") {
-            throw new Error(
-            `Player ${playerIndex} returned invalid call_trump action`
-            );
-        }
-
-        if (i === 4 && !action.call) {
-            action = this.players[playerIndex].getAction({
-            ...baseContext,
-            phase: "call_trump_forced"
-            });
-
-            if (!action || action.type !== "call_trump_forced") {
-            throw new Error(
-                `Dealer ${playerIndex} returned invalid forced call`
-            );
-            }
-
-            action.call = true; // forced must call
+            score: this.scores,
+              cardsRemaining: {
+              0: hands[0].length,
+              1: hands[1].length,
+              2: hands[2].length,
+              3: hands[3].length
+            },
+          });
+          action.call = true;
         }
 
         if (!action.call) continue;
-
-        if (!action.suit) {
-            throw new Error(
-            `Player ${playerIndex} called trump without suit`
-            );
-        }
-
-        if (action.suit === upcard.suit) {
-            throw new Error(
-            `Illegal trump call: cannot call upcard suit in second round`
-            );
-        }
 
         trump = action.suit;
         makerTeam = this.getTeam(playerIndex);
         alonePlayerIndex = action.alone ? playerIndex : null;
 
-        if (this.trackStats && action.alone) {
-            this.stats.aloneCalls++;
-        }
+        dealerPickedUp = false; // ⭐ explicitly false
 
         break;
-        }
+      }
     }
 
-    /* ============================= */
-    /* ===== SAFETY CHECK ========= */
-    /* ============================= */
-
-    if (!trump) {
-        throw new Error("No trump selected after bidding phase");
-    }
-
-    /* ============================= */
-    /* ===== PLAY TRICKS ========== */
-    /* ============================= */
+    if (!trump) throw new Error("No trump selected");
 
     const tricksWon = this.playTricks(
-        hands,
-        trump,
-        alonePlayerIndex,
-        makerTeam
+      hands,
+      trump,
+      alonePlayerIndex,
+      makerTeam,
+      dealerPickedUp // ⭐ pass flag
     );
 
     this.scoreRound(tricksWon, makerTeam, alonePlayerIndex);
-    }
+  }
 
-  /* ============================= */
-  /* ========= TRICKS ============ */
-  /* ============================= */
+  /* ================= TRICKS ================= */
 
-  playTricks(hands, trump, alonePlayerIndex, makerTeam) {
+  playTricks(hands, trump, alonePlayerIndex, makerTeam, dealerPickedUp) {
 
-    let leader = this.simLeader ?? (this.dealerIndex + 1) % 4;
+    let leader = (this.dealerIndex + 1) % 4;
+    const tricksWon = [0,0];
 
-    const tricksWon = this.simTricksWon
-      ? [this.simTricksWon.team0, this.simTricksWon.team1]
-      : [0, 0];
-
-    // ⭐ clone — never share reference
-    let played_cards = this.simPlayedCards
-      ? [...this.simPlayedCards]
-      : [];
-
-    const partnerIndex =
+    const partner =
       alonePlayerIndex !== null
         ? (alonePlayerIndex + 2) % 4
         : null;
 
-    const tricksCompleted = tricksWon[0] + tricksWon[1];
+    for (let t = 0; t < 5; t++) {
 
-    for (let trick = 0; trick < 5 - tricksCompleted; trick++) {
-
-      let trickCards =
-        trick === 0 && this.simTrickCards?.length
-          ? this.simTrickCards.map(t => ({ ...t }))
-          : [];
-
-      let leadSuit =
-        trick === 0
-          ? this.simLeadSuit ?? null
-          : null;
-
-      const playOrder = [];
+      let trickCards = [];
+      let leadSuit = null;
 
       for (let i = 0; i < 4; i++) {
 
         const p = (leader + i) % 4;
+        if (p === partner) continue;
 
-        if (p === partnerIndex) continue;
-
-        // skip players who already played
-        if (!trickCards.some(t => t.player === p)) {
-          playOrder.push(p);
-        }
-      }
-
-      for (let playerIndex of playOrder) {
-
-        const action = this.players[playerIndex].getAction({
+        const action = this.players[p].getAction({
           phase: "play_card",
-          hand: hands[playerIndex],
+          hand: hands[p],
           trump,
           trickCards,
           leadSuit,
-          played_cards,
-          trickLeader: leader,
-          myIndex: playerIndex,
+          myIndex: p,
+          makerTeam,
           alonePlayerIndex,
+          leaderIndex: leader,
+          playedCards: this.playedCards,
           voidInfo: this.voidInfo,
+          dealerPickedUp,
+          upcard: this.upcard,
           tricksSoFar: {
             team0: tricksWon[0],
             team1: tricksWon[1]
           },
-          makerTeam
+          cardsRemaining: {
+            0: hands[0].length,
+            1: hands[1].length,
+            2: hands[2].length,
+            3: hands[3].length
+          },
         });
 
-        if (!action || action.type !== "play_card" || !action.card) {
-          throw new Error(`Invalid play from player ${playerIndex}`);
-        }
-
         const card = action.card;
-        const hand = hands[playerIndex];
+        const hand = hands[p];
 
-        const cardIndex = hand.findIndex(
+        const idx = hand.findIndex(
           c => c.rank === card.rank && c.suit === card.suit
         );
 
-        if (cardIndex === -1) {
-          throw new Error(`Illegal play: player ${playerIndex} does not have card`);
-        }
+        if (idx === -1) throw new Error("Illegal play");
 
         if (leadSuit) {
-
-          const hasLeadSuit = hand.some(
+          const hasSuit = hand.some(
             c => getEffectiveSuit(c, trump) === leadSuit
           );
-
-          const effective = getEffectiveSuit(card, trump);
-
-          if (hasLeadSuit && effective !== leadSuit) {
-            throw new Error(`Illegal play: player ${playerIndex} failed to follow suit`);
+          if (hasSuit && getEffectiveSuit(card, trump) !== leadSuit) {
+            throw new Error("Failed to follow suit");
           }
         }
 
-        played_cards.push(card);
-        hand.splice(cardIndex, 1);
-
+        hand.splice(idx,1);
+        this.cardsRemaining[p]--;
         if (!leadSuit) {
           leadSuit = getEffectiveSuit(card, trump);
         }
 
-        trickCards.push({ player: playerIndex, card });
-        this.playedCards.push(card);
+        trickCards.push({ player:p, card });
       }
 
-      if (!trickCards.length) continue;
-
       const winnerOffset = determineTrickWinner(
-        trickCards.map(t => t.card),
+        trickCards.map(t=>t.card),
         leadSuit,
         trump
       );
 
       const winner = trickCards[winnerOffset].player;
-
       tricksWon[this.getTeam(winner)]++;
       leader = winner;
+
+      // Only now add to history
+      for (const t of trickCards) {
+        this.playedCards.push(t.card);
+      }
+
     }
 
     return tricksWon;
   }
-  /* ============================= */
-  /* ========= SCORING =========== */
-  /* ============================= */
+
+  /* ================= SCORING ================= */
 
   scoreRound(tricksWon, makerTeam, alonePlayerIndex) {
+
     const defending = 1 - makerTeam;
     const makerTricks = tricksWon[makerTeam];
 
-    if (makerTricks >= 3) {
-      if (makerTricks === 5) {
-        this.scores[`team${makerTeam}`] += 2;
-        if (this.trackStats) {
-          this.stats.sweeps++;
-          if (alonePlayerIndex !== null) this.stats.aloneSweeps++;
-        }
-      } else {
-        this.scores[`team${makerTeam}`] += 1;
-        if (this.trackStats && alonePlayerIndex !== null) {
-          this.stats.aloneWins++;
-        }
-      }
+  if (makerTricks >= 3) {
+    if (alonePlayerIndex !== null && makerTricks === 5) {
+      this.scores[`team${makerTeam}`] += 4;
+    } else if (makerTricks === 5) {
+      this.scores[`team${makerTeam}`] += 2;
     } else {
-      this.scores[`team${defending}`] += 2;
-      if (this.trackStats) {
-        this.stats.euchres++;
-        if (alonePlayerIndex !== null) this.stats.aloneEuchres++;
-      }
+      this.scores[`team${makerTeam}`] += 1;
     }
+  } else {
+    this.scores[`team${defending}`] += 2;
+  }
   }
 
-  /* ============================= */
-  /* ========= HELPERS =========== */
-  /* ============================= */
+  /* ================= HELPERS ================= */
 
   dealCards(deck) {
-    const hands = { 0:[],1:[],2:[],3:[] };
 
-    for (let i = 0; i < 5; i++) {
-      for (let j = 1; j <= 4; j++) {
-        const playerIndex = (this.dealerIndex + j) % 4;
-        hands[playerIndex].push(deck.pop());
+    const hands = {0:[],1:[],2:[],3:[]};
+
+    for (let i=0;i<5;i++) {
+      for (let j=1;j<=4;j++) {
+        const p = (this.dealerIndex + j) % 4;
+        hands[p].push(deck.pop());
       }
     }
 
     return hands;
   }
 
-  removeCardFromHand(hand, card) {
-    const index = hand.findIndex(
-      c => c.rank === card.rank && c.suit === card.suit
-    );
-
-    if (index === -1) {
-      throw new Error("Invalid card removal");
-    }
-
-    hand.splice(index, 1);
-  }
-
-  /* ============================= */
-  /* ========= STATS ============= */
-  /* ============================= */
+  /* ================= STATS ================= */
 
   resetStats() {
-    this.stats = {
-      totalRounds: 0,
-      team0Wins: 0,
-      team1Wins: 0,
-      sweeps: 0,
-      euchres: 0,
-      aloneCalls: 0,
-      aloneSweeps: 0,
-      aloneWins: 0,
-      aloneEuchres: 0
-    };
+    this.stats = { totalRounds: 0, roundLogs: [], team: {0:{},1:{}} };
   }
 
   getStats() {
     return this.trackStats ? this.stats : null;
   }
+
   resetGame() {
     this.scores = { team0: 0, team1: 0 };
   }

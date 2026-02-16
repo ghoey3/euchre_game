@@ -1,5 +1,7 @@
 import { determineTrickWinner } from "../../engine/trickLogic.js";
 import { getEffectiveSuit } from "../../engine/cardUtils.js";
+import { cloneCtx, cloneHands } from "./simClone.js";
+
 
 const DEBUG = false;
 
@@ -16,9 +18,8 @@ export default class OrderUpSimulator {
     if (!fixedHands) {
       throw new Error("OrderUpSimulator needs fixedHands");
     }
-
-    this.ctx = JSON.parse(JSON.stringify(rootContext));
-    this.hands = JSON.parse(JSON.stringify(fixedHands));
+    this.ctx = cloneCtx(rootContext);
+    this.hands = cloneHands(fixedHands);
 
     // Build per-player AI table
     if (aiFactory) {
@@ -126,14 +127,14 @@ export default class OrderUpSimulator {
           phase: "play_card",
           hand: this.hands[player],
           trump: this.trump,
-          trickCards,
+          trickCards: [...trickCards],
           leadSuit,
           trickLeader: leader,
           myIndex: player,
           makerTeam: this.ctx.makerTeam,
           alonePlayerIndex: this.ctx.alonePlayerIndex,
           voidInfo: this.ctx.voidInfo || {0:{},1:{},2:{},3:{}},
-          playedCards: this.playedCards
+          playedCards: [...this.playedCards]
         });
 
         if (!action || !action.card) {
@@ -149,7 +150,6 @@ export default class OrderUpSimulator {
         card = this.enforceLegalPlay(player, card, leadSuit);
 
         this.removeCard(this.hands[player], card);
-        this.playedCards.push(card);
 
         trickCards.push({ player, card });
       }
@@ -162,13 +162,20 @@ export default class OrderUpSimulator {
 
       leader = trickCards[winnerOffset].player;
       tricks[leader % 2]++;
+      for (const t of trickCards) {
+        this.playedCards.push(t.card);
+      }
+      trickCards = [];
     }
 
-    return this.scoreRound(
+ 
+    const result = this.scoreRound(
       tricks,
       this.ctx.makerTeam,
       this.ctx.alonePlayerIndex ?? null
     );
+    
+    return result
   }
 
   /* ================= FINISH TRICK ================= */
@@ -186,11 +193,11 @@ export default class OrderUpSimulator {
         phase: "play_card",
         hand: this.hands[player],
         trump: this.trump,
-        trickCards,
+        trickCards: [...trickCards],
         leadSuit,
         trickLeader: leader,
         myIndex: player,
-        playedCards: this.playedCards
+        playedCards: [...this.playedCards]
       });
 
       if (!action || !action.card) {
@@ -213,7 +220,9 @@ export default class OrderUpSimulator {
 
     const winner = trickCards[winnerOffset].player;
     tricks[winner % 2]++;
-
+    for (const t of trickCards) {
+      this.playedCards.push(t.card);
+    }
     return winner;
   }
 

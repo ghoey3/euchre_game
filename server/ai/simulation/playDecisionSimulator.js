@@ -1,20 +1,13 @@
 import PlayRolloutSim from "./playRolloutSimulator.js";
-import { createDeck, shuffle } from "../../engine/deck.js";
 import { getEffectiveSuit } from "../../engine/cardUtils.js";
+import { cloneHands } from "./simClone.js";
+import { sampleWorld } from "./worldSampler.js";
+const DEBUG = false
 
-
-const DEBUG_PLAY = false;
-
-function cardStr(c) {
-  return `${c.rank}${c.suit}`;
-}
+const cardKey  = c => c.rank + c.suit;
 export default class PlayDecisionSim {
 
-  constructor({
-    simulations = 200,
-    playoutAI = null,
-    aiFactory = null
-  }) {
+  constructor({ simulations = 200, playoutAI = null, aiFactory = null }) {
     this.simulations = simulations;
     this.playoutAI = playoutAI;
     this.aiFactory = aiFactory;
@@ -31,21 +24,52 @@ export default class PlayDecisionSim {
     if (legal.length === 1) return legal[0];
 
     const totals = new Map();
-    legal.forEach(card => totals.set(card, 0));
+    legal.forEach(card => totals.set(cardKey(card), 0));
 
     for (let i = 0; i < this.simulations; i++) {
+      if (DEBUG) {
+        console.log("PLAY SIM CONTEXT", {
+          myIndex: context.myIndex,
+          hand: context.hand.length,
+          played: context.playedCards?.length || 0,
+          trick: context.trickCards?.length || 0,
+          trump: context.trump,
+          leadSuit: context.leadSuit
+        });
+      }
 
-      const world = this.sampleWorld(context);
+      const world = sampleWorld(context);
+      if (DEBUG) {
+        console.log("\n[SAMPLE WORLD]");
+        for (let i = 0; i < 4; i++) {
+          console.log(
+            `Seat ${i}:`,
+            (world[i] || []).map(c => c.rank + c.suit)
+          );
+        }
+
+        const total =
+          Object.values(world).flat().length +
+          (context.playedCards?.length || 0) +
+          (context.trickCards?.length || 0);
+
+        console.log("Total cards including history:", total);
+      }
 
       for (const move of legal) {
 
-        const hands = JSON.parse(JSON.stringify(world));
+        const hands = cloneHands(world);
 
         hands[context.myIndex] =
-          context.hand.filter(c =>
+          hands[context.myIndex].filter(c =>
             !(c.rank === move.rank && c.suit === move.suit)
           );
-
+        if (DEBUG) {
+          console.log(
+            `[AFTER REMOVE] seat ${context.myIndex}:`,
+            hands[context.myIndex].map(c => c.rank + c.suit)
+          );
+        }
         const nextContext = {
           ...context,
           hand: hands[context.myIndex],
@@ -62,54 +86,18 @@ export default class PlayDecisionSim {
           context: nextContext,
           fixedHands: hands,
           aiFactory: this.aiFactory,
-          playoutAI: this.playoutAI
+          playoutAI: this.playoutAI,
+          rootPlayerIndex: context.myIndex // ⭐ ADD
         });
-
-        totals.set(move, totals.get(move) + rollout.run());
+        const k = cardKey(move);
+        totals.set(k, totals.get(k) + rollout.run());
+        
       }
     }
 
-    const sorted = [...totals.entries()]
-      .sort((a,b)=>b[1]-a[1]);
-
-    const chosen = sorted[0][0];
-  
-
-    if (DEBUG_PLAY) {
-
-      console.log("\n================ PLAY DECISION ================");
-
-      console.log("Seat:", context.myIndex);
-      console.log("Trump:", context.trump);
-      console.log("Lead suit:", context.leadSuit ?? "(leading)");
-
-      console.log("\nTrick so far:");
-
-      (context.trickCards || []).forEach(t => {
-        console.log(`Player ${t.player} -> ${cardStr(t.card)}`);
-      });
-
-      console.log(
-        "\nHand:",
-        context.hand.map(cardStr).join(" ")
-      );
-
-      console.log(
-        "Legal:",
-        legal.map(cardStr).join(" ")
-      );
-
-      console.log("\nRollout totals:");
-
-      for (const [card, score] of sorted) {
-        console.log(`${cardStr(card)} -> ${score.toFixed(3)}`);
-      }
-
-      console.log("\nChosen:", cardStr(chosen));
-      console.log("================================================\n");
-    }
-
-    return chosen;
+    return legal.sort(
+      (a,b) => totals.get(cardKey(b)) - totals.get(cardKey(a))
+    )[0];
   }
 
   getLegalCards(hand, leadSuit, trump) {
@@ -121,48 +109,5 @@ export default class PlayDecisionSim {
     );
 
     return follow.length ? follow : hand;
-  }
-
-  sampleWorld(context) {
-
-    const deck = createDeck();
-
-    const known = [
-      ...context.hand,
-      ...(context.playedCards || []),
-      ...(context.trickCards || []).map(t => t.card),
-      context.upcard
-    ].filter(Boolean);
-
-    let remaining = deck.filter(c =>
-      !known.some(k => k.rank === c.rank && k.suit === c.suit)
-    );
-
-    shuffle(remaining);
-
-    const hands = {0:[],1:[],2:[],3:[]};
-    hands[context.myIndex] = [...context.hand];
-
-    const target = context.hand.length;
-
-    for (let p = 0; p < 4; p++) {
-
-      if (p === context.myIndex) continue;
-
-      const voids = context.voidInfo?.[p] || {};
-
-      while (hands[p].length < target && remaining.length) {
-
-        const card = remaining.pop();
-
-        const eff = getEffectiveSuit(card, context.trump);
-
-        if (voids[eff]) continue;
-
-        hands[p].push(card);
-      }
-    }
-
-    return hands;
   }
 }

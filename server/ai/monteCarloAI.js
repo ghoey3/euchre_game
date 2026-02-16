@@ -4,8 +4,10 @@ import SoftmaxHeuristicAI from "./softmaxHeuristicAI.js";
 
 import OrderUpSimulator from "./simulation/orderUpSimulator.js";
 import PlayDecisionSim from "./simulation/playDecisionSimulator.js";
+import { sampleWorld } from "./simulation/worldSampler.js";
 
-import { createDeck, shuffle } from "../engine/deck.js";
+import { cloneCtx } from "./simulation/simClone.js";
+
 import { getEffectiveSuit } from "../engine/cardUtils.js";
 
 import { audit } from "./auditStats.js";
@@ -27,7 +29,7 @@ export default class MonteCarloAI extends BaseAI {
 
     this.playDecision = new PlayDecisionSim({
       simulations: this.simPlay,
-      aiFactory: () => this.createRolloutAI()
+      aiFactory: (seatIndex) => this.createRolloutAI(seatIndex)
     });
   }
 
@@ -35,34 +37,46 @@ export default class MonteCarloAI extends BaseAI {
     return 0.25 + Math.random() * 0.2;
   }
 
-  createRolloutAI() {
+  createRolloutAI(seatIndex) {
     return new SoftmaxHeuristicAI({
-      temperature: this.randomTemperature()
+      temperature: this.randomTemperature(),
+      seatIndex
     });
   }
 
   createAIFactory() {
-    return () => this.createRolloutAI();
+    return (seatIndex) => this.createRolloutAI(seatIndex);
   }
 
   /* ================= ORDER UP ================= */
 
   orderUp(context) {
+
     const start = profiler.start("orderUp");
+
     let callScore = 0;
+    let simsRun = 0;
 
     for (let i = 0; i < this.simOrder; i++) {
 
-      const simCtx = {
-        ...context,
-        hand: [...context.hand],
-        trickCards: [...(context.trickCards || [])],
-        playedCards: [...(context.playedCards || [])]
-      };
+      const simCtx = cloneCtx(context);
+
       simCtx.trump = context.upcard.suit;
       simCtx.makerTeam = context.myIndex % 2;
-
-      const fixedHands = this.sampleDeal(simCtx);
+      if (DEBUG) {
+        console.log("CONTEXT CHECK", {
+          hand: context.hand.length,
+          played: context.playedCards?.length || 0,
+          trick: context.trickCards?.length || 0
+        });
+        console.log("simCtx CHECK", {
+          hand: simCtx.hand.length,
+          played: simCtx.playedCards?.length || 0,
+          trick: simCtx.trickCards?.length || 0
+        });
+      }
+      
+      const fixedHands = sampleWorld(simCtx);
 
       const sim = new OrderUpSimulator({
         rootContext: simCtx,
@@ -72,50 +86,33 @@ export default class MonteCarloAI extends BaseAI {
       });
 
       callScore += sim.run();
-      if (i > 150) {
-        const avg = callScore / (i + 1);
+      simsRun++;
 
+      if (i > 150) {
+        const avg = callScore / simsRun;
         if (Math.abs(avg) > 1.5) break;
       }
     }
 
-    const avg = callScore / this.simOrder;
+    const avg = callScore / simsRun;
 
     audit.calls++;
     if (avg > 0) audit.positiveCalls++;
 
-    const decision = {
+    profiler.end("orderUp", start);
+
+    return {
       call: avg > this.callThreshold,
       alone: avg > 2.5
     };
-
-    if (DEBUG) {
-
-      this.orderCounter++;
-
-      console.log("====================================");
-      console.log(`ORDER #${this.orderCounter}`);
-      console.log("Seat:", context.myIndex);
-      console.log("Dealer:", context.dealerIndex);
-      console.log("Upcard:", context.upcard.rank + context.upcard.suit);
-
-      console.log(
-        "Hand:",
-        context.hand.map(c => c.rank + c.suit).join(" ")
-      );
-
-      console.log("Avg EV:", avg.toFixed(3));
-      console.log("Decision:", decision);
-      console.log("====================================");
-    }
-    profiler.end("orderUp", start);
-    return decision;
   }
 
   /* ================= PLAY CARD ================= */
 
   playCard(context) {
+
     const start = profiler.start("playDecision");
+
     const card = this.playDecision.chooseCard(context);
 
     audit.plays = (audit.plays || 0) + 1;
@@ -123,84 +120,13 @@ export default class MonteCarloAI extends BaseAI {
     const isTrump =
       getEffectiveSuit(card, context.trump) === context.trump;
 
-    if (isTrump)
+    if (isTrump) {
       audit.trumpPlayed = (audit.trumpPlayed || 0) + 1;
+    }
+
     profiler.end("playDecision", start);
+
     return card;
-  }
-
-  /* ================= SAMPLERS ================= */
-
-  sampleDeal(context) {
-
-    const deck = createDeck();
-
-    const known = [
-      ...context.hand,
-      context.upcard
-    ].filter(Boolean);
-
-    let remaining = deck.filter(c =>
-      !known.some(k => k.rank === c.rank && k.suit === c.suit)
-    );
-
-    shuffle(remaining);
-
-    const hands = {0:[],1:[],2:[],3:[]};
-    hands[context.myIndex] = [...context.hand];
-
-    for (let p = 0; p < 4; p++) {
-
-      if (p === context.myIndex) continue;
-
-      hands[p] = remaining.splice(0, 5);
-    }
-
-    return hands;
-  }
-
-  sampleWorld(context) {
-
-    const deck = createDeck();
-
-    const known = [
-      ...context.hand,
-      ...(context.playedCards || []),
-      ...(context.trickCards || []).map(t => t.card)
-    ].filter(Boolean);
-
-    let remaining = deck.filter(c =>
-      !known.some(k => k.rank === c.rank && k.suit === c.suit)
-    );
-
-    shuffle(remaining);
-
-    const hands = {0:[],1:[],2:[],3:[]};
-    hands[context.myIndex] = [...context.hand];
-
-    const target = context.hand.length;
-    const trump = context.trump;
-    const voidInfo = context.voidInfo || {0:{},1:{},2:{},3:{}};
-
-    for (let p = 0; p < 4; p++) {
-
-      if (p === context.myIndex) continue;
-
-      while (hands[p].length < target && remaining.length > 0) {
-
-        let idx = remaining.findIndex(card => {
-          const eff = getEffectiveSuit(card, trump);
-          return !voidInfo[p]?.[eff];
-        });
-
-        if (idx === -1) idx = 0;
-
-        const card = remaining.splice(idx, 1)[0];
-        hands[p].push(card);
-      }
-    }
-
-    return hands;
   }
 
   /* ================= ACTION ================= */
