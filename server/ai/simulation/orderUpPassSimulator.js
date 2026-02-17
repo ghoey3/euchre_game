@@ -47,7 +47,7 @@ export default class OrderUpPassSimulator {
         this.ctx.trump = this.ctx.upcard.suit;
         this.ctx.makerTeam = seat % 2;
         this.ctx.alonePlayerIndex = decision.alone ? seat : null;
-
+        this.ctx.makerIndex = seat;
         if (seat !== this.dealer) {
         this.applyPickup();
         }
@@ -87,6 +87,7 @@ export default class OrderUpPassSimulator {
         this.ctx.trump = decision.suit;
         this.ctx.makerTeam = seat % 2;
         this.ctx.alonePlayerIndex = decision.alone ? seat : null;
+        this.ctx.makerIndex = seat;
 
         return this.rollout();
       }
@@ -107,6 +108,7 @@ export default class OrderUpPassSimulator {
     this.ctx.trump = forced.suit;
     this.ctx.makerTeam = this.dealer % 2;
     this.ctx.alonePlayerIndex = null;
+    this.ctx.makerIndex = this.dealer;
 
     return this.rollout();
   }
@@ -129,6 +131,7 @@ export default class OrderUpPassSimulator {
     );
 
     this.hands[this.dealer].splice(idx, 1);
+    this.ctx.dealerPickedUp = true
   }
 
   rollout() {
@@ -138,14 +141,25 @@ export default class OrderUpPassSimulator {
       hand: this.hands[this.myIndex],
       trickCards: [],
       playedCards: this.playedCards,
-      tricksSoFar: { team0: 0, team1: 0 }
+      tricksSoFar: { team0: 0, team1: 0 },
+      rootPlayerIndex: this.myIndex
     };
-
+    // console.log("=== CONTRACT orderupPassSimulator ===", {
+    //   sim: this.constructor.name,
+    //   myIndex: this.myIndex ?? this.ctx.myIndex,
+    //   dealer: this.dealer ?? this.dealerIndex ?? this.ctx.dealerIndex,
+    //   trump: this.ctx.trump,
+    //   upcard: this.ctx.upcard?.rank + this.ctx.upcard?.suit,
+    //   dealerPickedUp: this.ctx.dealerPickedUp,
+    //   makerIndex: this.ctx.makerIndex,
+    //   makerTeam: this.ctx.makerTeam,
+    //   alone: this.ctx.alonePlayerIndex
+    // });
     const sim = new PlayRolloutSim({
       context: rolloutCtx,
       fixedHands: this.hands,
       aiFactory: (s) => this.ais[s],
-      rootPlayerIndex: this.myIndex
+      
     });
 
     return sim.run();

@@ -42,7 +42,7 @@ export default class CallTrumpSimulator {
   }
 
   run() {
-
+    this.ctx.makerIndex = this.ctx.myIndex;
     const rolloutCtx = {
       ...this.ctx,
       hand: this.hands[this.ctx.myIndex],
@@ -50,6 +50,19 @@ export default class CallTrumpSimulator {
       playedCards: this.playedCards,
       tricksSoFar: this.ctx.tricksSoFar ?? { team0: 0, team1: 0 }
     };
+    
+    // console.log("=== CONTRACT calltrumpsim ===", {
+    //   sim: this.constructor.name,
+    //   myIndex: this.myIndex ?? this.ctx.myIndex,
+    //   dealer: this.dealer ?? this.dealerIndex ?? this.ctx.dealerIndex,
+    //   trump: this.ctx.trump,
+    //   upcard: this.ctx.upcard?.rank + this.ctx.upcard?.suit,
+    //   dealerPickedUp: this.ctx.dealerPickedUp,
+    //   makerIndex: this.ctx.makerIndex,
+    //   makerTeam: this.ctx.makerTeam,
+    //   alone: this.ctx.alonePlayerIndex
+      
+    // });
 
     const rollout = new PlayRolloutSim({
       context: rolloutCtx,

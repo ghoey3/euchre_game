@@ -407,3 +407,46 @@ test("rule stress 1000 rounds", () => {
   const engine = new AIGameEngine(makePlayers());
   for (let i=0;i<1000;i++) engine.playRound();
 });
+
+test("trackStats exposes required aggregate fields", () => {
+  const engine = new AIGameEngine(makePlayers(), {
+    trackStats: true,
+    winningScore: 5
+  });
+
+  engine.playGame();
+
+  const stats = engine.stats;
+  const required = [
+    "totalRounds",
+    "sweeps",
+    "euchres",
+    "aloneCalls",
+    "aloneSweeps",
+    "aloneWins",
+    "aloneEuchres"
+  ];
+
+  for (const key of required) {
+    assert.equal(typeof stats[key], "number");
+    assert.ok(Number.isFinite(stats[key]));
+  }
+});
+
+test("trackStats alone call invariant holds", () => {
+  const engine = new AIGameEngine(makePlayers(), {
+    trackStats: true
+  });
+
+  for (let i = 0; i < 100; i++) {
+    engine.playRound();
+  }
+
+  const resolvedAloneOutcomes =
+    engine.stats.aloneSweeps +
+    engine.stats.aloneWins +
+    engine.stats.aloneEuchres;
+
+  assert.ok(engine.stats.aloneCalls >= resolvedAloneOutcomes);
+  assert.equal(engine.stats.totalRounds, engine.stats.roundLogs.length);
+});

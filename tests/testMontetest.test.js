@@ -96,12 +96,12 @@ test("Monte does not mutate context", () => {
 
   const context = {
     phase: "play_card",
-    hand: [c("A","hearts"), c("K","hearts")],
+    hand: [c("A","hearts"), c("K","hearts"), c("10","diamonds"), c("9","spades"), c("J","hearts")],
     trump: "hearts",
     trickCards: [],
     myIndex: 0,
     playedCards: [],
-    cardsRemaining: {0:2,1:5,2:5,3:5}
+    cardsRemaining: {0:5,1:5,2:5,3:5}
   };
 
   const before = JSON.stringify(context);
@@ -386,17 +386,22 @@ test("repeated Monte calls remain stable", () => {
 
   const context = {
     phase: "play_card",
-    hand: [c("A","hearts"), c("K","hearts"), c("9","hearts"), c("10","spades")],
+    hand: [c("A","hearts"), c("K","hearts"), c("9","hearts"), c("10","spades"), c("Q","clubs")],
     trump: "hearts",
-    trickCards: [],
+    trickCards: [{ player: 1, card: c("9","spades") }],
+    leadSuit: "spades",
     myIndex: 0,
-    playedCards: [c("9","spades")],
-    cardsRemaining: {0:4,1:5,2:5,3:5}
+    playedCards: [],
+    cardsRemaining: {0:5,1:4,2:5,3:5}
   };
 
   for (let i = 0; i < 50; i++) {
     const action = ai.getAction(context);
     assert.ok(action.card);
+    assert.ok(context.hand.some(
+      card => card.rank === action.card.rank && card.suit === action.card.suit
+    ));
+    assert.equal(action.card.suit, "spades");
   }
 });
 

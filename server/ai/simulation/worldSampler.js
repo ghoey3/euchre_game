@@ -46,28 +46,8 @@ export function sampleWorld(context) {
     throw new Error("cardsRemaining mismatch for my seat");
   }
 
-  if (context.dealerPickedUp && context.upcard) {
-
-    // Always remove from deck pool
+  if (context.upcard) {
     known.push(context.upcard);
-
-    // If dealer is NOT me, inject into their sampled hand
-    if (context.dealerIndex !== context.myIndex) {
-
-      const dealer = context.dealerIndex;
-
-      const alreadyInHand = hands[dealer].some(c =>
-        sameCard(c, context.upcard)
-      );
-
-      const upcardSeen =
-        (context.playedCards || []).some(c => sameCard(c, context.upcard)) ||
-        (context.trickCards || []).some(t => sameCard(t.card, context.upcard));
-
-      if (!alreadyInHand && !upcardSeen) {
-        hands[dealer].push(context.upcard);
-      }
-    }
   }
 
   let remaining = deck.filter(card =>

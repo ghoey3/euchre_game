@@ -57,37 +57,52 @@ export default class OrderUpSimulator {
   }
 
   run() {
-
-      // Apply pickup if dealer ordered up
-      if (
-        this.simulatePickup &&
-        this.ctx.upcard &&
-        this.trump === this.ctx.upcard.suit
-      ) {
-        this.applyPickup();
-      }
-
-      // Build rollout context
-      const rolloutCtx = {
-        ...this.ctx,
-        hand: this.hands[this.myIndex],
-        trickCards: this.ctx.trickCards ?? [],
-        playedCards: this.playedCards ?? [],
-        tricksSoFar: this.ctx.tricksSoFar ?? { team0: 0, team1: 0 }
-      };
-      if (DEBUG){ 
-        console.log(rolloutCtx)
-      } 
-      const rollout = new PlayRolloutSim({
-        context: rolloutCtx,
-        fixedHands: this.hands,
-        aiFactory: (seat) => this.ais[seat],
-        rootPlayerIndex: this.myIndex,
-        makerIndex: this.myIndex
-      });
-
-      return rollout.run();
+    this.ctx.trump = this.ctx.upcard.suit;
+    this.ctx.makerIndex = this.myIndex;
+    this.ctx.makerTeam = this.myIndex % 2;
+    // Apply pickup if dealer ordered up
+    if (
+      this.simulatePickup &&
+      this.ctx.upcard &&
+      this.ctx.trump === this.ctx.upcard.suit
+    ) {
+      this.applyPickup();
     }
+
+    // Build rollout context
+    
+    const rolloutCtx = {
+      ...this.ctx,
+      hand: this.hands[this.myIndex],
+      trickCards: this.ctx.trickCards ?? [],
+      playedCards: this.playedCards ?? [],
+      tricksSoFar: this.ctx.tricksSoFar ?? { team0: 0, team1: 0 },
+      makerIndex: this.myIndex,
+      rootPlayerIndex: this.myIndex,
+    };
+    if (DEBUG){ 
+      console.log(rolloutCtx)
+    } 
+    // console.log("=== CONTRACT orderupsimulator ===", {
+    //   sim: this.constructor.name,
+    //   myIndex: this.myIndex ?? this.ctx.myIndex,
+    //   dealer: this.dealer ?? this.dealerIndex ?? this.ctx.dealerIndex,
+    //   trump: this.ctx.trump,
+    //   upcard: this.ctx.upcard?.rank + this.ctx.upcard?.suit,
+    //   dealerPickedUp: this.ctx.dealerPickedUp,
+    //   makerIndex: this.ctx.makerIndex,
+    //   makerTeam: this.ctx.makerTeam,
+    //   alone: this.ctx.alonePlayerIndex,
+    //   makerIndex: this.myIndex,
+    // });
+    const rollout = new PlayRolloutSim({
+      context: rolloutCtx,
+      fixedHands: this.hands,
+      aiFactory: (seat) => this.ais[seat],        
+    });
+
+    return rollout.run();
+  }
 
 
   /* ================= PICKUP ================= */
@@ -115,6 +130,7 @@ export default class OrderUpSimulator {
     if (this.hands[dealer].length !== 5) {
       throw new Error("Pickup hand size wrong");
     }
+    this.ctx.dealerPickedUp = true
   }
 
   removeCard(hand, card) {

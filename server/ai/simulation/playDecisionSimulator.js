@@ -2,18 +2,31 @@ import PlayRolloutSim from "./playRolloutSimulator.js";
 import { getEffectiveSuit } from "../../engine/cardUtils.js";
 import { cloneHands } from "./simClone.js";
 import { sampleWorld } from "./worldSampler.js";
-const DEBUG = false
+import { profiler } from "../profiler.js";
 
-const cardKey  = c => c.rank + c.suit;
+const DEBUG = false;
+
+const cardKey = c => c.rank + c.suit;
+
 export default class PlayDecisionSim {
 
-  constructor({ simulations = 200, playoutAI = null, aiFactory = null }) {
+  constructor({
+    simulations = 200,
+    totalRolloutsPerDecision = null,
+    playoutAI = null,
+    aiFactory = null
+  }) {
     this.simulations = simulations;
+    this.totalRolloutsPerDecision = totalRolloutsPerDecision;
     this.playoutAI = playoutAI;
     this.aiFactory = aiFactory;
   }
 
-  chooseCard(context) {
+  chooseCard(input) {
+    const context = structuredClone(input);
+    this.ctx = context;
+    this.myIndex = context.myIndex;
+    this.dealerIndex = context.dealerIndex;
 
     const legal = this.getLegalCards(
       context.hand,
@@ -26,7 +39,18 @@ export default class PlayDecisionSim {
     const totals = new Map();
     legal.forEach(card => totals.set(cardKey(card), 0));
 
+    const totalBudget =
+      this.totalRolloutsPerDecision ??
+      (this.simulations * legal.length);
+
+    const simsPerMove = Math.floor(totalBudget / legal.length);
+    const extraMoves = totalBudget % legal.length;
+
     for (let i = 0; i < this.simulations; i++) {
+      if (i >= simsPerMove + (extraMoves > 0 ? 1 : 0)) {
+        break;
+      }
+
       if (DEBUG) {
         console.log("PLAY SIM CONTEXT", {
           myIndex: context.myIndex,
@@ -38,16 +62,11 @@ export default class PlayDecisionSim {
         });
       }
 
+      const sampleStart = profiler.start("playDecision.sampleWorld");
       const world = sampleWorld(context);
-      if (DEBUG) {
-        console.log("\n[SAMPLE WORLD]");
-        for (let i = 0; i < 4; i++) {
-          console.log(
-            `Seat ${i}:`,
-            (world[i] || []).map(c => c.rank + c.suit)
-          );
-        }
+      profiler.end("playDecision.sampleWorld", sampleStart);
 
+      if (DEBUG) {
         const total =
           Object.values(world).flat().length +
           (context.playedCards?.length || 0) +
@@ -56,7 +75,12 @@ export default class PlayDecisionSim {
         console.log("Total cards including history:", total);
       }
 
-      for (const move of legal) {
+      for (let moveIndex = 0; moveIndex < legal.length; moveIndex++) {
+        const move = legal[moveIndex];
+
+        if (moveIndex >= extraMoves && i >= simsPerMove) {
+          continue;
+        }
 
         const hands = cloneHands(world);
 
@@ -64,12 +88,7 @@ export default class PlayDecisionSim {
           hands[context.myIndex].filter(c =>
             !(c.rank === move.rank && c.suit === move.suit)
           );
-        if (DEBUG) {
-          console.log(
-            `[AFTER REMOVE] seat ${context.myIndex}:`,
-            hands[context.myIndex].map(c => c.rank + c.suit)
-          );
-        }
+
         const nextContext = {
           ...context,
           hand: hands[context.myIndex],
@@ -87,16 +106,20 @@ export default class PlayDecisionSim {
           fixedHands: hands,
           aiFactory: this.aiFactory,
           playoutAI: this.playoutAI,
-          rootPlayerIndex: context.myIndex // ⭐ ADD
+          rootPlayerIndex: context.myIndex
         });
+
+        const rolloutStart = profiler.start("playDecision.rollout");
+        const result = rollout.run();
+        profiler.end("playDecision.rollout", rolloutStart);
+
         const k = cardKey(move);
-        totals.set(k, totals.get(k) + rollout.run());
-        
+        totals.set(k, totals.get(k) + result);
       }
     }
 
     return legal.sort(
-      (a,b) => totals.get(cardKey(b)) - totals.get(cardKey(a))
+      (a, b) => totals.get(cardKey(b)) - totals.get(cardKey(a))
     )[0];
   }
 

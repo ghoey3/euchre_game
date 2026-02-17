@@ -5,7 +5,9 @@ import { cloneCtx, cloneHands } from "./simClone.js";
 
 import { validateWorld } from "./monteSentinel.js";
 
-const DEBUG = true;
+import assert from "node:assert";
+
+const DEBUG = false;
 const FAST = false; 
 
 function dlog(...args) {
@@ -20,6 +22,7 @@ export default class PlayRolloutSim {
     this.cardsRemaining = { ...(context.cardsRemaining || {}) };
     this.rootPlayerIndex = rootPlayerIndex ?? context.myIndex;
     this.ctx = normalizeCtx(cloneCtx(context));
+    this.makerIndex = this.ctx.makerIndex;
     this.hands = cloneHands(fixedHands);
 
     dlog("Hands after clone:");
@@ -145,6 +148,7 @@ export default class PlayRolloutSim {
 
           const hand = this.hands[player];
           if (!hand) throw new Error("Hand undefined for seat " + player);
+          if (hand.length === 0) continue;
 
           dlog("Hand:", hand.map(c => c.rank + c.suit));
 
@@ -188,6 +192,7 @@ export default class PlayRolloutSim {
             trickCards
           });
         }
+        if (trickCards.length === 0) break;
 
       } else {
 
@@ -196,6 +201,7 @@ export default class PlayRolloutSim {
         for (const player of seatOrder) {
 
           if (trickCards.some(t => t.player === player)) continue;
+          if (!this.hands[player] || this.hands[player].length === 0) continue;
 
           dlog("Finishing trick — turn:", player);
 
@@ -228,6 +234,7 @@ export default class PlayRolloutSim {
           trickCards.push({ player, card });
         }
       }
+      if (trickCards.length === 0) break;
 
       dlog("Trick complete:", trickCards.map(t => `${t.player}:${t.card.rank}${t.card.suit}`));
 
@@ -263,7 +270,7 @@ export default class PlayRolloutSim {
 
     dlog("=== RUN END ===");
 
-    const makerTeam = this.ctx.makerTeam;
+    const makerTeam = this.makerIndex % 2;
     const rootTeam = this.rootPlayerIndex % 2;
 
     const makerTricks = tricks[makerTeam];
@@ -284,7 +291,8 @@ export default class PlayRolloutSim {
       makerEV = -2; // euchred
 
     }
-
+    assert.ok(makerTeam != null , "maker team is null");
+    assert.ok(rootTeam != null , "root team is null");
     return rootTeam === makerTeam ? makerEV : -makerEV;
   }
 

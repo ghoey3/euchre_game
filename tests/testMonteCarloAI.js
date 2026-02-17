@@ -6,7 +6,7 @@ import { audit } from "../server/ai/auditStats.js";
 import { profiler } from "../server/ai/profiler.js";
 
 
-const NUM_GAMES = 5;
+const NUM_GAMES = 50;
 
 // const THRESHOLDS = [0.25, 0.3, 0.35, 0.4, 0.45, 0.5];
 const THRESHOLDS = [0.25];
@@ -47,14 +47,28 @@ console.log(`Running threshold sweep with ${NUM_GAMES} games each...\n`);
 
       const players = [
         new MonteCarloAI({
-          simulationsPerCardPlay: 200,
-          simulationsPerOrderUp: 600,
+          simulationsPerMove: 80,
+          simulationsPerOrderUpCall: 160,
+          simulationsPerOrderUpPass: 120,
+          simulationsPerCallTrump: 100,
+          totalRolloutsPerDecision: 120,
+          minSims: 40,
+          maxSims: 200,
+          evMarginStop: 0.35,
+          confidenceStop: 1.25,
           callThreshold: threshold
         }),
         new SimpleAI(),
         new MonteCarloAI({
-          simulationsPerCardPlay: 200,
-          simulationsPerOrderUp: 600,
+          simulationsPerMove: 80,
+          simulationsPerOrderUpCall: 160,
+          simulationsPerOrderUpPass: 120,
+          simulationsPerCallTrump: 100,
+          totalRolloutsPerDecision: 120,
+          minSims: 40,
+          maxSims: 200,
+          evMarginStop: 0.35,
+          confidenceStop: 1.25,
           callThreshold: threshold
         }),
         new SimpleAI()

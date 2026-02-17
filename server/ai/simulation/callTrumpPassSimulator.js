@@ -53,6 +53,7 @@ export class CallTrumpPassSimulator {
 
         chosenSuit = action.suit;
         makerIndex = seat;
+        this.ctx.makerIndex = makerIndex;
         break;
 
       }
@@ -98,6 +99,17 @@ export class CallTrumpPassSimulator {
       playedCards: this.playedCards,
       tricksSoFar: this.ctx.tricksSoFar ?? { team0: 0, team1: 0 }
     };
+    // console.log("=== CONTRACT calltrumppass ===", {
+    //   sim: this.constructor.name,
+    //   myIndex: this.myIndex ?? this.ctx.myIndex,
+    //   dealer: this.dealer ?? this.dealerIndex ?? this.ctx.dealerIndex,
+    //   trump: this.ctx.trump,
+    //   upcard: this.ctx.upcard?.rank + this.ctx.upcard?.suit,
+    //   dealerPickedUp: this.ctx.dealerPickedUp,
+    //   makerIndex: this.ctx.makerIndex,
+    //   makerTeam: this.ctx.makerTeam,
+    //   alone: this.ctx.alonePlayerIndex
+    // });
 
     const rollout = new PlayRolloutSim({
       context: rolloutCtx,

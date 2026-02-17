@@ -11,17 +11,55 @@ export default class AIGameEngine {
 
     this.dealerIndex = 0;
     this.scores = { team0: 0, team1: 0 };
-
+    this.stats = null;
     if (this.trackStats) {
       this.resetStats();
     }
+
+    this.resetContract();
+  }
+
+  /* ================= CONTRACT ================= */
+
+  resetContract() {
+    this.trump = null;
+    this.makerIndex = null;
+    this.makerTeam = null;
+    this.alonePlayerIndex = null;
+    this.dealerPickedUp = false;
+  }
+
+  /* ================= CONTEXT BUILDER ================= */
+
+  buildBaseContext(playerIndex) {
+    return {
+      myIndex: playerIndex,
+      dealerIndex: this.dealerIndex,
+
+      trump: this.trump,
+      upcard: this.upcard,
+
+      makerIndex: this.makerIndex,
+      makerTeam: this.makerTeam,
+      alonePlayerIndex: this.alonePlayerIndex,
+      dealerPickedUp: this.dealerPickedUp,
+
+      playedCards: this.playedCards,
+      voidInfo: this.voidInfo,
+
+      cardsRemaining: this.cardsRemaining,
+
+      score: this.scores,
+    };
   }
 
   /* ================= GAME LOOP ================= */
 
   playGame() {
-
     this.scores = { team0: 0, team1: 0 };
+    if (this.trackStats) {
+      this.resetStats();
+    }
 
     while (!this.isGameOver()) {
       this.playRound();
@@ -47,79 +85,59 @@ export default class AIGameEngine {
     this.dealerIndex = (this.dealerIndex + 1) % 4;
   }
 
-  getTeam(playerIndex) {
-    return playerIndex % 2;
+  getTeam(i) {
+    return i % 2;
   }
 
   /* ================= ROUND ================= */
 
   playRound() {
-
-    if (this.trackStats) {
-      this.stats.totalRounds++;
-    }
+    this.resetContract();
 
     this.playedCards = [];
-    this.voidInfo = { 0:{},1:{},2:{},3:{} };
+    this.voidInfo = {0:{},1:{},2:{},3:{}};
 
     const deck = shuffle(createDeck());
     const hands = this.dealCards(deck);
+
     this.cardsRemaining = {
       0: hands[0].length,
       1: hands[1].length,
       2: hands[2].length,
       3: hands[3].length
     };
-    const upcard = deck.pop();
 
-    this.upcard = upcard;
-    let trump = null;
-    let makerTeam = null;
-    let alonePlayerIndex = null;
-    let dealerPickedUp = false; // ⭐ NEW
+    this.upcard = deck.pop();
 
-    /* ===== FIRST ROUND ===== */
+    /* ===== ORDER UP ROUND ===== */
 
     for (let i = 1; i <= 4; i++) {
 
-      const playerIndex = (this.dealerIndex + i) % 4;
+      const p = (this.dealerIndex + i) % 4;
 
-      const action = this.players[playerIndex].getAction({
+      const action = this.players[p].getAction({
         phase: "order_up",
-        hand: hands[playerIndex],
-        upcard,
-        dealerIndex: this.dealerIndex,
-        myIndex: playerIndex,
-        score: this.scores,
-        tricksSoFar: {
-            team0: 0,
-            team1: 0
-         },
-        cardsRemaining: {
-          0: hands[0].length,
-          1: hands[1].length,
-          2: hands[2].length,
-          3: hands[3].length
-        },
+        hand: hands[p],
+        ...this.buildBaseContext(p)
       });
 
       if (!action.call) continue;
 
-      trump = upcard.suit;
-      makerTeam = this.getTeam(playerIndex);
-      alonePlayerIndex = action.alone ? playerIndex : null;
+      this.trump = this.upcard.suit;
+      this.makerIndex = p;
+      this.makerTeam = this.getTeam(p);
+      this.alonePlayerIndex = action.alone ? p : null;
+      if (this.trackStats && this.alonePlayerIndex !== null) {
+        this.stats.aloneCalls++;
+      }
 
-      hands[this.dealerIndex].push(upcard);
-      dealerPickedUp = true; // ⭐ IMPORTANT
+      hands[this.dealerIndex].push(this.upcard);
+      this.dealerPickedUp = true;
 
       const discard = this.players[this.dealerIndex].getAction({
         phase: "discard",
         hand: hands[this.dealerIndex],
-        trump,
-        tricksSoFar: {
-          team0: 0,
-          team1: 0
-        },
+        trump: this.trump,
         dealerIndex: this.dealerIndex
       });
 
@@ -128,95 +146,67 @@ export default class AIGameEngine {
       );
 
       hands[this.dealerIndex].splice(idx, 1);
-
       break;
     }
 
-    /* ===== SECOND ROUND ===== */
+    /* ===== CALL TRUMP ROUND ===== */
 
-    if (!trump) {
+    if (!this.trump) {
 
       for (let i = 1; i <= 4; i++) {
 
-        const playerIndex = (this.dealerIndex + i) % 4;
+        const p = (this.dealerIndex + i) % 4;
 
-        let action = this.players[playerIndex].getAction({
+        let action = this.players[p].getAction({
           phase: "call_trump",
-          hand: hands[playerIndex],
-          upcard,
-          dealerIndex: this.dealerIndex,
-          myIndex: playerIndex,
-          score: this.scores,
-          cardsRemaining: {
-            0: hands[0].length,
-            1: hands[1].length,
-            2: hands[2].length,
-            3: hands[3].length
-          },
+          hand: hands[p],
+          ...this.buildBaseContext(p)
         });
 
         if (i === 4 && !action.call) {
-          action = this.players[playerIndex].getAction({
+          action = this.players[p].getAction({
             phase: "call_trump_forced",
-            hand: hands[playerIndex],
-            upcard,
-            dealerIndex: this.dealerIndex,
-            myIndex: playerIndex,
-            score: this.scores,
-              cardsRemaining: {
-              0: hands[0].length,
-              1: hands[1].length,
-              2: hands[2].length,
-              3: hands[3].length
-            },
+            hand: hands[p],
+            ...this.buildBaseContext(p)
           });
           action.call = true;
         }
 
         if (!action.call) continue;
 
-        trump = action.suit;
-        makerTeam = this.getTeam(playerIndex);
-        alonePlayerIndex = action.alone ? playerIndex : null;
-
-        dealerPickedUp = false; // ⭐ explicitly false
+        this.trump = action.suit;
+        this.makerIndex = p;
+        this.makerTeam = this.getTeam(p);
+        this.alonePlayerIndex = action.alone ? p : null;
+        if (this.trackStats && this.alonePlayerIndex !== null) {
+          this.stats.aloneCalls++;
+        }
+        this.dealerPickedUp = false;
 
         break;
       }
     }
 
-    if (!trump) throw new Error("No trump selected");
+    if (!this.trump) throw new Error("No trump selected");
 
+    const tricksWon = this.playTricks(hands);
+
+    this.scoreRound(tricksWon);
     if (this.trackStats) {
-      this.currentRoundLog = {
-        makerTeam,
-        alonePlayerIndex,
-        tricksWon: null
-      };
+      this.stats.totalRounds++;
     }
-    const tricksWon = this.playTricks(
-      hands,
-      trump,
-      alonePlayerIndex,
-      makerTeam,
-      dealerPickedUp // ⭐ pass flag
-    );
-    if (this.trackStats) {
-      this.currentRoundLog.tricksWon = [...tricksWon];
-    }
-    this.scoreRound(tricksWon, makerTeam, alonePlayerIndex);
   }
 
   /* ================= TRICKS ================= */
 
-  playTricks(hands, trump, alonePlayerIndex, makerTeam, dealerPickedUp) {
+  playTricks(hands) {
 
     let leader = (this.dealerIndex + 1) % 4;
     const tricksWon = [0,0];
 
     const partner =
-      alonePlayerIndex !== null
-        ? (alonePlayerIndex + 2) % 4
+      this.alonePlayerIndex !== null
+        ? (this.alonePlayerIndex + 2) % 4
         : null;
 
     for (let t = 0; t < 5; t++) {
@@ -232,28 +222,13 @@ export default class AIGameEngine {
         const action = this.players[p].getAction({
           phase: "play_card",
           hand: hands[p],
-          trump,
           trickCards,
           leadSuit,
-          myIndex: p,
-          makerTeam,
-          alonePlayerIndex,
-          leaderIndex: leader,
-          playedCards: this.playedCards,
-          voidInfo: this.voidInfo,
-          dealerPickedUp,
-          dealerIndex: this.dealerIndex,
-          upcard: this.upcard,
           tricksSoFar: {
             team0: tricksWon[0],
             team1: tricksWon[1]
           },
-          cardsRemaining: {
-            0: hands[0].length,
-            1: hands[1].length,
-            2: hands[2].length,
-            3: hands[3].length
-          },
+          ...this.buildBaseContext(p)
         });
 
         const card = action.card;
@@ -267,17 +242,18 @@ export default class AIGameEngine {
 
         if (leadSuit) {
           const hasSuit = hand.some(
-            c => getEffectiveSuit(c, trump) === leadSuit
+            c => getEffectiveSuit(c, this.trump) === leadSuit
           );
-          if (hasSuit && getEffectiveSuit(card, trump) !== leadSuit) {
+          if (hasSuit && getEffectiveSuit(card, this.trump) !== leadSuit) {
             throw new Error("Failed to follow suit");
           }
         }
 
-        hand.splice(idx,1);
+        hand.splice(idx, 1);
         this.cardsRemaining[p]--;
+
         if (!leadSuit) {
-          leadSuit = getEffectiveSuit(card, trump);
+          leadSuit = getEffectiveSuit(card, this.trump);
         }
 
         trickCards.push({ player:p, card });
@@ -286,18 +262,16 @@ export default class AIGameEngine {
       const winnerOffset = determineTrickWinner(
         trickCards.map(t=>t.card),
         leadSuit,
-        trump
+        this.trump
       );
 
       const winner = trickCards[winnerOffset].player;
       tricksWon[this.getTeam(winner)]++;
       leader = winner;
 
-      // Only now add to history
       for (const t of trickCards) {
         this.playedCards.push(t.card);
       }
-
     }
 
     return tricksWon;
@@ -305,41 +279,54 @@ export default class AIGameEngine {
 
   /* ================= SCORING ================= */
 
-  scoreRound(tricksWon, makerTeam, alonePlayerIndex) {
+  scoreRound(tricksWon) {
 
-    const defending = 1 - makerTeam;
-    const makerTricks = tricksWon[makerTeam];
+    const defending = 1 - this.makerTeam;
+    const makerTricks = tricksWon[this.makerTeam];
+    const isSweep = makerTricks === 5;
+    const isEuchre = makerTricks < 3;
+    const isAlone = this.alonePlayerIndex !== null;
 
-    if (makerTricks >= 3) {
-      if (alonePlayerIndex !== null && makerTricks === 5) {
-        this.scores[`team${makerTeam}`] += 4;
-      } else if (makerTricks === 5) {
-        this.scores[`team${makerTeam}`] += 2;
+    if (!isEuchre) {
+      if (isAlone && isSweep) {
+        this.scores[`team${this.makerTeam}`] += 4;
+      } else if (isSweep) {
+        this.scores[`team${this.makerTeam}`] += 2;
       } else {
-        this.scores[`team${makerTeam}`] += 1;
+        this.scores[`team${this.makerTeam}`] += 1;
       }
     } else {
       this.scores[`team${defending}`] += 2;
     }
+
     if (this.trackStats) {
-      const defending = 1 - makerTeam;
-      const makerTricks = tricksWon[makerTeam];
+      if (isSweep) this.stats.sweeps++;
+      if (isEuchre) this.stats.euchres++;
 
-      const euchred = makerTricks < 3;
-
-      if (euchred) {
-        this.stats.team[defending].euchresInflicted++;
-        this.stats.team[makerTeam].euchresSuffered++;
+      if (isAlone) {
+        if (isSweep) this.stats.aloneSweeps++;
+        else if (isEuchre) this.stats.aloneEuchres++;
+        else this.stats.aloneWins++;
       }
 
-      this.stats.roundLogs.push(this.currentRoundLog);
+      if (isEuchre) {
+        this.stats.team[defending].euchresInflicted++;
+        this.stats.team[this.makerTeam].euchresSuffered++;
+      }
+
+      this.stats.roundLogs.push({
+        makerTeam: this.makerTeam,
+        makerIndex: this.makerIndex,
+        alonePlayerIndex: this.alonePlayerIndex,
+        dealerIndex: this.dealerIndex,
+        tricksWon: [...tricksWon]
+      });
     }
   }
 
   /* ================= HELPERS ================= */
 
   dealCards(deck) {
-
     const hands = {0:[],1:[],2:[],3:[]};
 
     for (let i=0;i<5;i++) {
@@ -351,25 +338,26 @@ export default class AIGameEngine {
 
     return hands;
   }
-
-  /* ================= STATS ================= */
+  resetGame() {
+    this.scores = { team0: 0, team1: 0 };
+    if (this.trackStats) this.resetStats();
+    this.resetContract();
+  }
 
   resetStats() {
     this.stats = {
       totalRounds: 0,
+      sweeps: 0,
+      euchres: 0,
+      aloneCalls: 0,
+      aloneSweeps: 0,
+      aloneWins: 0,
+      aloneEuchres: 0,
       roundLogs: [],
       team: {
         0: { euchresInflicted: 0, euchresSuffered: 0, wins: 0 },
         1: { euchresInflicted: 0, euchresSuffered: 0, wins: 0 }
       }
     };
-  }
-
-  getStats() {
-    return this.trackStats ? this.stats : null;
-  }
-
-  resetGame() {
-    this.scores = { team0: 0, team1: 0 };
   }
 }

@@ -17,7 +17,28 @@ import { audit } from "./auditStats.js";
 import { profiler } from "./profiler.js";
 
 const DEBUG = false;
-const FAST = true;
+
+function makeStat() {
+  return { n: 0, mean: 0, m2: 0 };
+}
+
+function pushStat(stat, value) {
+  stat.n++;
+  const delta = value - stat.mean;
+  stat.mean += delta / stat.n;
+  const delta2 = value - stat.mean;
+  stat.m2 += delta * delta2;
+}
+
+function variance(stat) {
+  if (stat.n < 2) return Infinity;
+  return stat.m2 / (stat.n - 1);
+}
+
+function stdError(stat) {
+  if (stat.n < 2) return Infinity;
+  return Math.sqrt(variance(stat) / stat.n);
+}
 
 export default class MonteCarloAI extends BaseAI {
 
@@ -25,14 +46,38 @@ export default class MonteCarloAI extends BaseAI {
     super("MonteCarloAI");
 
     this.callThreshold = options.callThreshold ?? 0.4;
-    this.simPlay = options.simulationsPerMove ?? 200;
-    this.simOrder = options.simulationsPerOrderUp ?? 600;
+
+    this.simPlay =
+      options.simulationsPerMove ??
+      options.simulationsPerCardPlay ??
+      80;
+
+    this.simOrderCall =
+      options.simulationsPerOrderUpCall ??
+      options.simulationsPerOrderUp ??
+      160;
+    this.simOrderPass =
+      options.simulationsPerOrderUpPass ??
+      options.simulationsPerOrderUp ??
+      120;
+    this.simCallTrump =
+      options.simulationsPerCallTrump ??
+      options.simulationsPerOrderUp ??
+      100;
+
+    this.minSims = options.minSims ?? 40;
+    this.maxSims = options.maxSims ?? 200;
+    this.evMarginStop = options.evMarginStop ?? 0.35;
+    this.confidenceStop = options.confidenceStop ?? 1.25;
+    this.totalRolloutsPerDecision =
+      options.totalRolloutsPerDecision ?? 120;
 
     this.fallbackAI = new SimpleAI();
     this.orderCounter = 0;
     this.rolloutAIFactory = this.createAIFactory();
     this.playDecision = new PlayDecisionSim({
       simulations: this.simPlay,
+      totalRolloutsPerDecision: this.totalRolloutsPerDecision,
       aiFactory: this.rolloutAIFactory
     });
   }
@@ -58,72 +103,91 @@ export default class MonteCarloAI extends BaseAI {
 
     const start = profiler.start("orderUp");
 
-    let callTotal = 0;
-    let passTotal = 0;
-    let sims = 0;
+    const callStats = makeStat();
+    const passStats = makeStat();
 
-    for (let i = 0; i < this.simOrder; i++) {
+    const callBudget = Math.min(this.simOrderCall, this.maxSims);
+    const passBudget = Math.min(this.simOrderPass, this.maxSims);
+    const loopBudget = Math.max(callBudget, passBudget);
+
+    for (let i = 0; i < loopBudget; i++) {
 
       const simCtx = cloneCtx(context);
-
+      const sampleStart = profiler.start("orderUp.sampleWorld");
       const fixedHands = sampleWorld(simCtx);
+      profiler.end("orderUp.sampleWorld", sampleStart);
 
-      //
-      // ===== CALL EV =====
-      //
+      if (i < callBudget) {
+        const callStart = profiler.start("orderUp.callEV");
+        const callSim = new OrderUpSimulator({
+          rootContext: simCtx,
+          fixedHands,
+          aiFactory: this.createAIFactory(),
+          simulatePickup: true
+        });
+        pushStat(callStats, callSim.run());
+        profiler.end("orderUp.callEV", callStart);
+      }
 
-      const callSim = new OrderUpSimulator({
-        rootContext: simCtx,
-        fixedHands,
-        aiFactory: this.createAIFactory(),
-        simulatePickup: true
-      });
-
-      callTotal += callSim.run();
-
-      //
-      // ===== PASS EV =====
-      //
-
-      const passSim = new OrderUpPassSimulator({
-        rootContext: simCtx,
-        fixedHands,
-        aiFactory: this.createAIFactory()
-      });
-
-      const passResult = passSim.run();
-
-      if (passResult !== null) {
-
-        // someone ordered
-        passTotal += passResult;
-
-      } else {
-
-        // nobody ordered → round 2
-
-        const round2Sim = new CallTrumpPassSimulator({
+      if (i < passBudget) {
+        const passRound1Start = profiler.start("orderUp.passEV.round1");
+        const passSim = new OrderUpPassSimulator({
           rootContext: simCtx,
           fixedHands,
           aiFactory: this.createAIFactory()
         });
 
-        passTotal += round2Sim.run();
+        const passResult = passSim.run();
+        profiler.end("orderUp.passEV.round1", passRound1Start);
+
+        if (passResult !== null) {
+          pushStat(passStats, passResult);
+        } else {
+          const passRound2Start = profiler.start("orderUp.passEV.round2");
+          const round2Sim = new CallTrumpPassSimulator({
+            rootContext: simCtx,
+            fixedHands,
+            aiFactory: this.createAIFactory()
+          });
+          pushStat(passStats, round2Sim.run());
+          profiler.end("orderUp.passEV.round2", passRound2Start);
+        }
       }
 
-      sims++;
+      if (
+        callStats.n >= this.minSims &&
+        passStats.n >= this.minSims
+      ) {
+        const delta = callStats.mean - passStats.mean;
+        const combinedSE =
+          Math.sqrt(stdError(callStats) ** 2 + stdError(passStats) ** 2);
+
+        if (
+          Number.isFinite(combinedSE) &&
+          Math.abs(delta) >
+            this.evMarginStop + this.confidenceStop * combinedSE
+        ) {
+          break;
+        }
+      }
     }
 
-    const callEV = callTotal / sims;
-    const passEV = passTotal / sims;
-    console.log("OrderUpEV", callEV);
-    console.log("PassEV", passEV);
+    const callEV = callStats.mean;
+    const passEV = passStats.mean;
     profiler.end("orderUp", start);
 
-    return {
+    if (DEBUG) {
+      console.log("OrderUp EV", { callEV, passEV, callN: callStats.n, passN: passStats.n });
+    }
+
+    const decision = {
       call: callEV > passEV,
       alone: callEV > 2.5
     };
+    if (decision.call) {
+      audit.calls = (audit.calls || 0) + 1;
+    }
+    return decision;
   }
 
   /* ================= PLAY CARD ================= */
@@ -147,7 +211,8 @@ export default class MonteCarloAI extends BaseAI {
 
     return card;
   }
-  /* ================= call trump ================= */ 
+
+  /* ================= CALL TRUMP ================= */
 
   callTrump(context) {
 
@@ -160,13 +225,12 @@ export default class MonteCarloAI extends BaseAI {
 
     for (const suit of candidates) {
 
-      let total = 0;
-      let sims = 0;
+      const stats = makeStat();
+      const localBudget = Math.min(this.simCallTrump, this.maxSims);
 
-      for (let i = 0; i < this.simOrder; i++) {
+      for (let i = 0; i < localBudget; i++) {
 
         const simCtx = cloneCtx(context);
-
         const fixedHands = sampleWorld(simCtx);
 
         const sim = new CallTrumpSimulator({
@@ -176,17 +240,20 @@ export default class MonteCarloAI extends BaseAI {
           aiFactory: this.createAIFactory()
         });
 
-        total += sim.run();
-        sims++;
-        // Early stop if obvious
-        if (i > 150) {
-          const avg = total / sims;
-          if (Math.abs(avg) > 1.5) break;
+        pushStat(stats, sim.run());
+
+        if (stats.n >= this.minSims && Number.isFinite(bestEV)) {
+          const se = stdError(stats);
+          const margin = this.confidenceStop * se + this.evMarginStop;
+          const upperBound = stats.mean + margin;
+
+          if (upperBound < bestEV) {
+            break;
+          }
         }
       }
 
-      const avgEV = total / sims;
-      console.log("Call EV", suit, avgEV);
+      const avgEV = stats.mean;
 
       if (avgEV > bestEV) {
         bestEV = avgEV;
@@ -196,14 +263,16 @@ export default class MonteCarloAI extends BaseAI {
 
     profiler.end("callTrump", start);
 
-    return {
+    const decision = {
       call: bestEV > 0,
       suit: bestSuit,
       alone: bestEV > 2.5
     };
+    if (decision.call) {
+      audit.calls = (audit.calls || 0) + 1;
+    }
+    return decision;
   }
-
-
 
   /* ================= ACTION ================= */
 
@@ -218,7 +287,7 @@ export default class MonteCarloAI extends BaseAI {
         return { type: "play_card", card: this.playCard(context) };
 
       case "call_trump":
-        return { type: "call_trump", card: this.callTrump(context) };
+        return { type: "call_trump", ...this.callTrump(context) };
 
       default:
         return this.fallbackAI.getAction(context);
@@ -227,7 +296,7 @@ export default class MonteCarloAI extends BaseAI {
 
   getCandidateSuits(context) {
 
-    const suits = ["hearts","diamonds","clubs","spades"];
+    const suits = ["hearts", "diamonds", "clubs", "spades"];
     const heuristic = new SoftmaxHeuristicAI({ temperature: 0.3 });
 
     const scored = suits
@@ -236,12 +305,10 @@ export default class MonteCarloAI extends BaseAI {
         suit: s,
         score: heuristic.evaluateHand(context.hand, s)
       }))
-      .sort((a,b) => b.score - a.score);
+      .sort((a, b) => b.score - a.score);
 
-    // Always include best
     const candidates = [scored[0].suit];
 
-    // Include second if close
     if (scored[1] && scored[1].score > scored[0].score - 15) {
       candidates.push(scored[1].suit);
     }
